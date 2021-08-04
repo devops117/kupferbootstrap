@@ -260,8 +260,7 @@ def setup_dependencies_and_sources(package: Package):
     """
     if package.mode == 'cross':
         for p in package.depends:
-            subprocess.run(pacman_cmd + ['-Sw', p],
-                           stderr=subprocess.DEVNULL)
+            subprocess.run(pacman_cmd + ['-S', p])
 
     result = subprocess.run(makepkg_cmd +
                             ['--nobuild',
