@@ -264,7 +264,6 @@ def setup_dependencies_and_sources(package: Package):
 
     result = subprocess.run(makepkg_cmd +
                             ['--nobuild',
-                             '--skipinteg',
                              '--holdver',
                              '--syncdeps'],
                             env=makepkg_env,
