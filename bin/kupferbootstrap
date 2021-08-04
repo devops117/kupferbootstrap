@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# shellcheck disable=SC2068
+python3 "$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")/wrapper.py" $@
