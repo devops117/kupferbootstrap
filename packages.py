@@ -358,38 +358,33 @@ def cmd_build(verbose, path):
     check_prebuilts()
 
     if path == 'all':
-        packages = generate_package_order(discover_packages())
-        need_build = []
-
-        for package in packages:
-            update_package_version_and_sources(package)
-            if not check_package_version_built(package):
-                need_build.append(package)
-
-        if len(need_build) == 0:
-            logging.info('Everything built already')
-            return
-        logging.info('Building %s', ', '.join(
-            map(lambda x: x.path, need_build)))
-        with open('.last_built', 'w') as file:
-            file.write('\n'.join(
-                map(lambda x: x.path, need_build)))
-
-        for package in need_build:
-            setup_chroot()
-            setup_dependencies_and_sources(package)
-            build_package(package)
-            add_package_to_repo(package)
+        packages = discover_packages()
     else:
         package = Package(path)
+        packages = package.local_depends + [package]
+
+    package_order = generate_package_order(packages)
+    need_build = []
+    for package in package_order:
         update_package_version_and_sources(package)
         if not check_package_version_built(package):
-            with open('.last_built', 'w') as file:
-                file.write(package.path)
-            setup_chroot()
-            setup_dependencies_and_sources(package)
-            build_package(package)
-            add_package_to_repo(package)
+            need_build.append(package)
+
+    if len(need_build) == 0:
+        logging.info('Everything built already')
+        return
+    logging.info('Building %s', ', '.join(
+        map(lambda x: x.path, need_build)))
+    with open('.last_built', 'w') as file:
+        file.write('\n'.join(
+            map(lambda x: x.path, need_build)))
+
+    for package in need_build:
+        setup_chroot()
+        setup_dependencies_and_sources(package)
+        build_package(package)
+        add_package_to_repo(package)
+
 
 
 @click.command(name='clean')
