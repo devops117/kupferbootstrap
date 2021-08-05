@@ -30,6 +30,7 @@ pacman_cmd = ['pacman',
 
 
 class Package:
+    name = ''
     names = []
     depends = []
     local_depends = None
@@ -49,7 +50,10 @@ class Package:
         names = []
         depends = []
         for line in lines:
-            if line.startswith('pkgbase') or line.startswith('\tpkgname') or line.startswith('\tprovides'):
+            if line.startswith('\tpkgname'):
+                self.name = line.split(' = ')[1]
+                names.append(self.name)
+            if line.startswith('pkgbase') or line.startswith('\tprovides'):
                 names.append(line.split(' = ')[1])
             if line.startswith('\tdepends') or line.startswith('\tmakedepends') or line.startswith('\tcheckdepends') or line.startswith('\toptdepends'):
                 depends.append(line.split(' = ')[1].split('=')[0])
@@ -133,8 +137,8 @@ def setup_chroot(chroot_path='/chroot/root'):
         exit(1)
 
 
-def discover_packages() -> list[Package]:
-    packages = []
+def discover_packages() -> dict[str, Package]:
+    packages = {}
     paths = []
 
     for dir in os.listdir('main'):
@@ -145,14 +149,15 @@ def discover_packages() -> list[Package]:
 
     for path in paths:
         logging.debug(f'Discovered {path}')
-        packages.append(Package(path))
+        package = Package(path)
+        packages[package.name] = package
 
     # This filters the deps to only include the ones that are provided in this repo
-    for package in packages:
+    for package in packages.values():
         package.local_depends = package.depends.copy()
         for dep in package.depends.copy():
             found = False
-            for p in packages:
+            for p in packages.values():
                 for name in p.names:
                     if dep == name:
                         found = True
@@ -357,13 +362,16 @@ def cmd_build(verbose, path):
 
     check_prebuilts()
 
-    if path == 'all':
-        packages = discover_packages()
-    else:
-        package = Package(path)
-        packages = package.local_depends + [package]
+    packages = discover_packages()
 
-    package_order = generate_package_order(packages)
+    if path != 'all':
+        selection = []
+        for package in packages.values():
+            if package.path == path:
+                # TODO: currently matches through package.name only, no provides
+                selection += [ packages[pkg] for pkg in package.local_depends] + [package]
+
+    package_order = generate_package_order(list(packages.values()))
     need_build = []
     for package in package_order:
         update_package_version_and_sources(package)
