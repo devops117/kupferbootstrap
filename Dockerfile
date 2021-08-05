@@ -4,7 +4,8 @@ RUN pacman -Syu --noconfirm \
     python python-pip \
     devtools rsync \
     aarch64-linux-gnu-gcc aarch64-linux-gnu-binutils aarch64-linux-gnu-glibc aarch64-linux-gnu-linux-api-headers \
-    git
+    git \
+    android-tools
 
 RUN sed -i "s/EUID == 0/EUID == -1/g" $(which makepkg)
 
@@ -18,7 +19,6 @@ RUN yes | pacman -Scc
 
 RUN sed -i "s/SigLevel.*/SigLevel = Never/g" /etc/pacman.conf
 RUN sed -i "s|run_pacman |run_pacman --root \"/chroot/copy\" --arch aarch64 --config \"/app/src/pacman_copy.conf\" |g" $(which makepkg)
-RUN echo "Server = http://mirror.archlinuxarm.org/\$arch/\$repo" > /etc/pacman.d/aarch64_mirrorlist
 RUN mkdir -p /app/bin
 RUN ln -sf $(which aarch64-linux-gnu-strip) /app/bin/strip
 

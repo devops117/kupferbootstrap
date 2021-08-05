@@ -123,8 +123,6 @@ def setup_chroot():
         file.write('\n\n[device]\nServer = file:///src/prebuilts/device')
     shutil.copyfile('/app/src/pacman_copy.conf',
                     '/chroot/root/etc/pacman.conf')
-    shutil.copyfile('/etc/pacman.d/aarch64_mirrorlist',
-                    '/chroot/root/etc/pacman.d/aarch64_mirrorlist')
     result = subprocess.run(pacman_cmd +
                             ['-Sy',
                              '--root', '/chroot/root',

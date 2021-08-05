@@ -28,4 +28,4 @@ sed -i "s/@CARCH@/aarch64/g" pacman.conf
 sed -i "s/#ParallelDownloads.*/ParallelDownloads = 8/g" pacman.conf
 sed -i "s/SigLevel.*/SigLevel = Never/g" pacman.conf
 sed -i "s/^CheckSpace/#CheckSpace/g" pacman.conf
-sed -i "s|/mirrorlist|/aarch64_mirrorlist|g" pacman.conf
+sed -i "s|Include = /etc/pacman.d/mirrorlist|Server = http://mirror.archlinuxarm.org/\$arch/\$repo|g" pacman.conf

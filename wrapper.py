@@ -43,10 +43,15 @@ else:
                         'run',
                         '--name', 'kupferbootstrap',
                         '--rm',
+                        '--interactive',
+                        '--tty',
                         '--privileged',
                         '-v', f'{os.getcwd()}:/src:z',
                         '-v', f'{os.path.join(appdirs.user_cache_dir("kupfer"),"chroot")}:/chroot:z',
                         '-v', f'{os.path.join(appdirs.user_cache_dir("kupfer"),"pacman")}:/var/cache/pacman/pkg:z',
+                        '-v', f'{os.path.join(appdirs.user_cache_dir("kupfer"),"jumpdrive")}:/var/cache/jumpdrive:z',
+                        '-v', '/dev:/dev',
+                        #'-v', '/mnt/kupfer:/mnt/kupfer:z',
                         '-v', '/usr/share/i18n/locales:/usr/share/i18n/locales:ro'] +
                        [tag,
                         'kupferbootstrap']
