@@ -369,7 +369,8 @@ def cmd_build(verbose, path):
         for package in packages.values():
             if package.path == path:
                 # TODO: currently matches through package.name only, no provides
-                selection += [ packages[pkg] for pkg in package.local_depends] + [package]
+                selection += [ packages[pkg] for pkg in package.local_depends ] + [package]
+        packages = { package.name:package for package in selection }
 
     package_order = generate_package_order(list(packages.values()))
     need_build = []
