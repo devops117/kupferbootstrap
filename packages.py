@@ -49,13 +49,14 @@ class Package:
         lines = result.stdout.decode('utf-8').split('\n')
         names = []
         depends = []
-        for line in lines:
-            if line.startswith('\tpkgname'):
+        for line_raw in lines:
+            line = line_raw.lstrip()
+            if line.startswith('pkgname'):
                 self.name = line.split(' = ')[1]
                 names.append(self.name)
-            if line.startswith('pkgbase') or line.startswith('\tprovides'):
+            if line.startswith('pkgbase') or line.startswith('provides'):
                 names.append(line.split(' = ')[1])
-            if line.startswith('\tdepends') or line.startswith('\tmakedepends') or line.startswith('\tcheckdepends') or line.startswith('\toptdepends'):
+            if line.startswith('depends') or line.startswith('makedepends') or line.startswith('checkdepends') or line.startswith('optdepends'):
                 depends.append(line.split(' = ')[1].split('=')[0])
         self.names = list(set(names))
         self.depends = list(set(depends))
