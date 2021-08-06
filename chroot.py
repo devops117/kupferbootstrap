@@ -1,9 +1,24 @@
 import logging
 import subprocess
+import os
+import shutil
 
-def create_chroot(chroot_path, packages=['base'], pacman_conf='/app/src/pacman.conf'):
+def create_chroot(chroot_path, packages=['base'], pacman_conf='/app/src/pacman.conf', chroot_base_path='/chroot', extra_repos={}):
+    pacman_conf_target=chroot_path+'/etc/pacman.conf'
+
+    os.makedirs(chroot_path+'/etc', exist_ok=True)
+    shutil.copyfile(pacman_conf, pacman_conf_target)
+
+    extra_conf = ''
+    for repo_name, repo_options in extra_repos.items():
+        extra_conf += f'\n\n[{repo_name}]\n'
+        extra_conf += '\n'.join(['%s = %s' % (name,value) for name,value in repo_options.items()])
+    with open(pacman_conf_target, 'a') as file:
+        file.write(extra_conf)
+
+
     result = subprocess.run(['pacstrap',
-                             '-C', pacman_conf,
+                             '-C', pacman_conf_target,
                              '-c',
                              '-G',
                              chroot_path]

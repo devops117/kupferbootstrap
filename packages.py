@@ -6,10 +6,15 @@ import multiprocessing
 import os
 import shutil
 import subprocess
+from chroot import create_chroot
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
     'MAKEFLAGS': f'-j{multiprocessing.cpu_count()}',
+}
+
+makepkg_cross_env = makepkg_env | {
+     'PACMAN': '/app/bin/pacman_aarch64'
 }
 
 makepkg_cmd = ['makepkg',
@@ -93,41 +98,16 @@ def check_prebuilts():
                         exit(1)
 
 
-def setup_chroot():
-    if not os.path.exists('/chroot/root'):
-        logging.info('Initializing root chroot')
-        result = subprocess.run(['mkarchroot',
-                                 '-s',
-                                 '-C', '/app/src/pacman.conf',
-                                 '-f', '/etc/locale.gen',
-                                 '/chroot/root',
-                                 'base-devel'])
-        if result.returncode != 0:
-            logging.fatal('Failed to initialize root chroot')
-            shutil.rmtree('/chroot/root')
-            exit(1)
-    else:
-        logging.info('Updating root chroot')
-        result = subprocess.run(pacman_cmd +
-                                ['-Syuu',
-                                 '--root', '/chroot/root',
-                                 '--arch', 'aarch64',
-                                 '--config', '/app/src/pacman.conf'])
-        if result.returncode != 0:
-            logging.fatal('Failed to update root chroot')
-            exit(1)
+def setup_chroot(chroot_path='/chroot/root'):
+    logging.info('Initializing root chroot')
+    create_chroot(chroot_path, packages=['base-devel'], pacman_conf='/app/src/pacman.conf', extra_repos={'main': {'Server': 'file:///src/prebuilts/main'}, 'device': {'Server': 'file:///src/prebuilts/device'}})
 
-    shutil.copyfile('/app/src/pacman.conf', '/app/src/pacman_copy.conf')
-    with open('/app/src/pacman_copy.conf', 'a') as file:
-        file.write('\n\n[main]\nServer = file:///src/prebuilts/main')
-        file.write('\n\n[device]\nServer = file:///src/prebuilts/device')
-    shutil.copyfile('/app/src/pacman_copy.conf',
-                    '/chroot/root/etc/pacman.conf')
+    logging.info('Updating root chroot')
     result = subprocess.run(pacman_cmd +
-                            ['-Sy',
-                             '--root', '/chroot/root',
+                            ['-Syuu',
+                             '--root', chroot_path,
                              '--arch', 'aarch64',
-                             '--config', '/chroot/root/etc/pacman.conf'])
+                             '--config', chroot_path+'/etc/pacman.conf'])
     if result.returncode != 0:
         logging.fatal('Failed to update root chroot')
         exit(1)
@@ -219,7 +199,7 @@ def update_package_version_and_sources(package: Package):
         cmd.append('--noextract')
     logging.info(f'Updating package version for {package.path}')
     result = subprocess.run(cmd,
-                            env=makepkg_env,
+                            env=makepkg_cross_env,
                             cwd=package.path)
     if result.returncode != 0:
         logging.fatal(f'Failed to update package version for {package.path}')
@@ -233,7 +213,7 @@ def check_package_version_built(package: Package) -> bool:
                             ['--nobuild',
                              '--noprepare',
                              '--packagelist'],
-                            env=makepkg_env,
+                            env=makepkg_cross_env,
                             cwd=package.path,
                             capture_output=True)
     if result.returncode != 0:
@@ -258,17 +238,21 @@ def setup_dependencies_and_sources(package: Package):
     """
     if package.mode == 'cross':
         for p in package.depends:
-            subprocess.run(pacman_cmd + ['-S', p], stderr=subprocess.DEVNULL)
+            result = subprocess.run(pacman_cmd + ['-S', p], stderr=subprocess.DEVNULL)
+            if result.returncode != 0:
+                logging.fatal(
+                    f'Failed to setup dependencies for {package.path}')
+                exit(1)
 
     result = subprocess.run(makepkg_cmd +
                             ['--nobuild',
                              '--holdver',
                              '--syncdeps'],
-                            env=makepkg_env,
+                            env=makepkg_cross_env,
                             cwd=package.path)
     if result.returncode != 0:
         logging.fatal(
-            f'Failed to setup dependencies and sources for {package.path}')
+            f'Failed to check sources for {package.path}')
         exit(1)
 
 
@@ -281,7 +265,7 @@ def build_package(package: Package):
     if package.mode == 'cross':
         logging.info(f'Cross-compiling {package.path}')
         result = subprocess.run(makepkg_cmd+makepkg_compile_opts,
-                                env=makepkg_env | {
+                                env=makepkg_cross_env | {
                                     'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
                                 cwd=package.path)
         if result.returncode != 0:
@@ -310,11 +294,9 @@ def build_package(package: Package):
                 f'Failed to bind mount folder to chroot')
             exit(1)
 
-        env = []
-        for key in makepkg_env:
-            env.append(f'{key}={makepkg_env[key]}')
+        env = [f'{key}={value}' for key, value in makepkg_env.items()]
         result = subprocess.run(
-            ['arch-chroot', '/chroot/copy', '/bin/bash', '-c', f'cd /src/{package.path} && {" ".join(env)} makepkg --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'])
+            ['arch-chroot', '/chroot/copy', '/usr/bin/env'] + env + [ '/bin/bash', '-c', f'cd /src/{package.path} && makepkg --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'])
         if result.returncode != 0:
             logging.fatal(f'Failed to host-compile package {package.path}')
             exit(1)

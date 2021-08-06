@@ -117,13 +117,6 @@ def cmd_build(verbose):
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
 
-    shutil.copyfile('/app/src/pacman.conf', '/app/src/pacman_copy.conf')
-    with open('/app/src/pacman_copy.conf', 'a') as file:
-        file.write(
-            '\n\n[main]\nServer = https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo')
-        file.write(
-            '\n\n[device]\nServer = https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo')
-
     if not os.path.exists(image_name):
         result = subprocess.run(['fallocate',
                                  '-l', '4G',
@@ -141,7 +134,7 @@ def cmd_build(verbose):
 
     rootfs_mount = mount_rootfs_image(image_name)
 
-    create_chroot(rootfs_mount, packages=(['base','base-kupfer'] + devices[device] + flavours[flavour]), pacman_conf='/app/src/pacman_copy.conf')
+    create_chroot(rootfs_mount, packages=(['base','base-kupfer'] + devices[device] + flavours[flavour]), pacman_conf='/app/src/pacman.conf', extra_repos={'main': {'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'}, 'device': {'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'}})
 
 
 """

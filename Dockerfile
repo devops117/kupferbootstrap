@@ -18,7 +18,6 @@ RUN cd /tmp && \
 RUN yes | pacman -Scc
 
 RUN sed -i "s/SigLevel.*/SigLevel = Never/g" /etc/pacman.conf
-RUN sed -i "s|run_pacman |run_pacman --root \"/chroot/copy\" --arch aarch64 --config \"/app/src/pacman_copy.conf\" |g" $(which makepkg)
 RUN mkdir -p /app/bin
 RUN ln -sf $(which aarch64-linux-gnu-strip) /app/bin/strip
 
