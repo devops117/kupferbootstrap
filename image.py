@@ -7,6 +7,7 @@ import subprocess
 import time
 import click
 from logger import *
+from chroot import create_chroot
 
 devices = {
     'oneplus-enchilada': ['sdm845-oneplus-enchilada'],
@@ -140,36 +141,7 @@ def cmd_build(verbose):
 
     rootfs_mount = mount_rootfs_image(image_name)
 
-    result = subprocess.run(['pacstrap',
-                             '-C', '/app/src/pacman_copy.conf',
-                             '-c',
-                             '-G',
-                             rootfs_mount,
-                             'base', 'base-kupfer']
-                            + devices[device]
-                            + flavours[flavour]
-                            + ['--needed', '--overwrite=*', '-yyuu'])
-
-    with open(os.path.join(rootfs_mount, 'install'), 'w') as file:
-        user = 'kupfer'
-        password = '123456'
-        groups = ['network', 'video', 'audio', 'optical', 'storage',
-                  'input', 'scanner', 'games', 'lp', 'rfkill', 'wheel']
-        file.write('\n'.join([
-            f'if ! id -u "{user}" >/dev/null 2>&1; then',
-            f'  useradd -m {user}',
-            f'fi',
-            f'usermod -a -G {",".join(groups)} {user}',
-            f'echo "{user}:{password}" | chpasswd',
-            f'chown {user}:{user} /home/{user} -R',
-        ]))
-    result = subprocess.run(['arch-chroot',
-                             rootfs_mount,
-                             '/bin/bash', '/install'])
-    os.unlink(os.path.join(rootfs_mount, 'install'))
-    if result.returncode != 0:
-        logging.fatal('Failed to setup user')
-        exit(1)
+    create_chroot(rootfs_mount, packages=(['base','base-kupfer'] + devices[device] + flavours[flavour]), pacman_conf='/app/src/pacman_copy.conf')
 
 
 """
