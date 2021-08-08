@@ -9,3 +9,17 @@ format:
     - pip install yapf autoflake
   script:
     - ./format.sh --check
+
+build_docker:
+  stage: build
+  image: docker:latest
+  services: ['docker:dind']
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - docker build --pull -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}" -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}" .
+    - if [[ "$CI_COMMIT_REF_NAME" == "main" ]]; then docker image tag "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}" "${CI_REGISTRY_IMAGE}:latest"; fi
+    - docker push -a "${CI_REGISTRY_IMAGE}"
+  only:
+    - main
+    - dev
