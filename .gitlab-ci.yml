@@ -1,0 +1,11 @@
+stages:
+  - check
+  - build
+
+format:
+  stage: check
+  image: python
+  before_script:
+    - pip install yapf autoflake
+  script:
+    - ./format.sh --check
