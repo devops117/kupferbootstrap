@@ -7,7 +7,7 @@ import subprocess
 import time
 import click
 from logger import *
-from chroot import create_chroot
+from chroot import create_chroot, create_chroot_user
 
 devices = {
     'oneplus-enchilada': ['sdm845-oneplus-enchilada'],
@@ -136,6 +136,7 @@ def cmd_build(verbose):
 
     create_chroot(rootfs_mount, packages=(['base', 'base-kupfer'] + devices[device] + flavours[flavour]), pacman_conf='/app/local/etc/pacman.conf', extra_repos={'main': {
                   'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'}, 'device': {'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'}})
+    create_chroot_user(rootfs_mount)
 
 
 """

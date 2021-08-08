@@ -29,6 +29,8 @@ def create_chroot(chroot_path, packages=['base'], pacman_conf='/app/local/etc/pa
         logging.fatal('Failed to install system')
         exit(1)
 
+
+def create_chroot_user(chroot_path):
     user = 'kupfer'
     password = '123456'
     groups = ['network', 'video', 'audio', 'optical', 'storage',
@@ -42,8 +44,8 @@ def create_chroot(chroot_path, packages=['base'], pacman_conf='/app/local/etc/pa
         f'chown {user}:{user} /home/{user} -R',
     ])
     result = subprocess.run(['arch-chroot',
-                             chroot_path,
-                             '/bin/bash',
+                            chroot_path,
+                            '/bin/bash',
                              '-c',
                              install_script])
     if result.returncode != 0:
