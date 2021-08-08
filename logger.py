@@ -11,7 +11,7 @@ def setup_logging(verbose: bool):
         stream=sys.stdout,
         format='%(asctime)s %(levelname)s: %(message)s',
         datefmt='%m/%d/%Y %H:%M:%S',
-        level=level
+        level=level,
     )
 
 
@@ -19,5 +19,5 @@ verbose_option = click.option(
     '-v',
     '--verbose',
     is_flag=True,
-    help='Enables verbose logging'
+    help='Enables verbose logging',
 )

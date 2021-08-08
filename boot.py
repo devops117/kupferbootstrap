@@ -1,10 +1,9 @@
 import os
 import urllib.request
 from image import get_device_and_flavour, get_image_name
-from logger import *
+from logger import logging, setup_logging, verbose_option
 import click
 import subprocess
-
 
 FASTBOOT = 'fastboot'
 
@@ -20,9 +19,12 @@ boot_strategies = {
 
 def dump_bootimg(image_name: str) -> str:
     path = '/tmp/boot.img'
-    result = subprocess.run(['debugfs',
-                             image_name,
-                             '-R', f'dump /boot/boot.img {path}'])
+    result = subprocess.run([
+        'debugfs',
+        image_name,
+        '-R',
+        f'dump /boot/boot.img {path}',
+    ])
     if result.returncode != 0:
         logging.fatal(f'Faild to dump boot.img')
         exit(1)
@@ -43,8 +45,7 @@ def cmd_boot(verbose, type):
         if type == JUMPDRIVE:
             file = f'boot-{device}.img'
             path = os.path.join('/var/cache/jumpdrive', file)
-            urllib.request.urlretrieve(
-                f'https://github.com/dreemurrs-embedded/Jumpdrive/releases/download/{jumpdrive_version}/{file}', path)
+            urllib.request.urlretrieve(f'https://github.com/dreemurrs-embedded/Jumpdrive/releases/download/{jumpdrive_version}/{file}', path)
         else:
             path = dump_bootimg(image_name)
 

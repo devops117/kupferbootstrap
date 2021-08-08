@@ -1,5 +1,5 @@
 import shutil
-from logger import *
+from logger import setup_logging, verbose_option
 import click
 import os
 

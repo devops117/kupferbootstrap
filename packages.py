@@ -1,5 +1,4 @@
-from cmath import log
-from logger import *
+from logger import setup_logging, verbose_option
 import atexit
 import click
 import logging
@@ -15,21 +14,24 @@ makepkg_env = os.environ.copy() | {
     'MAKEFLAGS': f'-j{multiprocessing.cpu_count()}',
 }
 
-makepkg_cross_env = makepkg_env | {
-    'PACMAN': '/app/local/bin/pacman_aarch64'
-}
+makepkg_cross_env = makepkg_env | {'PACMAN': '/app/local/bin/pacman_aarch64'}
 
-makepkg_cmd = ['makepkg',
-               '--config', '/app/local/etc/makepkg.conf',
-               '--noconfirm',
-               '--ignorearch',
-               '--needed']
+makepkg_cmd = [
+    'makepkg',
+    '--config',
+    '/app/local/etc/makepkg.conf',
+    '--noconfirm',
+    '--ignorearch',
+    '--needed',
+]
 
-pacman_cmd = ['pacman',
-              '-Syuu',
-              '--noconfirm',
-              '--overwrite=*',
-              '--needed', ]
+pacman_cmd = [
+    'pacman',
+    '-Syuu',
+    '--noconfirm',
+    '--overwrite=*',
+    '--needed',
+]
 
 
 class Package:
@@ -46,9 +48,11 @@ class Package:
         self._loadinfo()
 
     def _loadinfo(self):
-        result = subprocess.run(makepkg_cmd+['--printsrcinfo'],
-                                cwd=self.path,
-                                stdout=subprocess.PIPE)
+        result = subprocess.run(
+            makepkg_cmd + ['--printsrcinfo'],
+            cwd=self.path,
+            stdout=subprocess.PIPE,
+        )
         lines = result.stdout.decode('utf-8').split('\n')
         names = []
         depends = []
@@ -73,8 +77,7 @@ class Package:
                     mode = line.split('=')[1]
                     break
         if mode not in ['host', 'cross']:
-            logging.fatal(
-                f'Package {self.path} has an invalid mode configured: \'{mode}\'')
+            logging.fatal(f'Package {self.path} has an invalid mode configured: \'{mode}\'')
             exit(1)
         self.mode = mode
 
@@ -96,11 +99,16 @@ def check_prebuilts():
         for ext1 in ['db', 'files']:
             for ext2 in ['', '.tar.xz']:
                 if not os.path.exists(os.path.join('prebuilts', repo, f'{repo}.{ext1}{ext2}')):
-                    result = subprocess.run(['tar',
-                                            '-czf',
-                                             f'{repo}.{ext1}{ext2}',
-                                             '-T', '/dev/null'],
-                                            cwd=os.path.join('prebuilts', repo))
+                    result = subprocess.run(
+                        [
+                            'tar',
+                            '-czf',
+                            f'{repo}.{ext1}{ext2}',
+                            '-T',
+                            '/dev/null',
+                        ],
+                        cwd=os.path.join('prebuilts', repo),
+                    )
                     if result.returncode != 0:
                         logging.fatal('Failed create prebuilt repos')
                         exit(1)
@@ -108,14 +116,29 @@ def check_prebuilts():
 
 def setup_chroot(chroot_path='/chroot/root'):
     logging.info('Initializing root chroot')
-    create_chroot(chroot_path, packages=['base-devel'], pacman_conf='/app/local/etc/pacman.conf', extra_repos={
-                  'main': {'Server': 'file:///src/prebuilts/main'}, 'device': {'Server': 'file:///src/prebuilts/device'}})
+    create_chroot(
+        chroot_path,
+        packages=['base-devel'],
+        pacman_conf='/app/local/etc/pacman.conf',
+        extra_repos={
+            'main': {
+                'Server': 'file:///src/prebuilts/main',
+            },
+            'device': {
+                'Server': 'file:///src/prebuilts/device',
+            },
+        },
+    )
 
     logging.info('Updating root chroot')
-    result = subprocess.run(pacman_cmd +
-                            ['--root', chroot_path,
-                             '--arch', 'aarch64',
-                             '--config', chroot_path+'/etc/pacman.conf'])
+    result = subprocess.run(pacman_cmd + [
+        '--root',
+        chroot_path,
+        '--arch',
+        'aarch64',
+        '--config',
+        chroot_path + '/etc/pacman.conf',
+    ])
     if result.returncode != 0:
         logging.fatal('Failed to update root chroot')
         exit(1)
@@ -134,8 +157,16 @@ def setup_chroot(chroot_path='/chroot/root'):
         file.write(data)
 
     logging.info('Syncing chroot copy')
-    result = subprocess.run(
-        ['rsync', '-a', '--delete', '-q', '-W', '-x', '/chroot/root/', '/chroot/copy'])
+    result = subprocess.run([
+        'rsync',
+        '-a',
+        '--delete',
+        '-q',
+        '-W',
+        '-x',
+        '/chroot/root/',
+        '/chroot/copy',
+    ])
     if result.returncode != 0:
         logging.fatal('Failed to sync chroot copy')
         exit(1)
@@ -151,8 +182,7 @@ def discover_packages(path: str) -> dict[str, Package]:
         for dir2 in os.listdir(os.path.join('device', dir1)):
             paths.append(os.path.join('device', dir1, dir2))
 
-    results = Parallel(n_jobs=multiprocessing.cpu_count()*4)(
-        delayed(Package)(path) for path in paths)
+    results = Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(Package)(path) for path in paths)
     for package in results:
         packages[package.name] = package
 
@@ -189,8 +219,7 @@ def discover_packages(path: str) -> dict[str, Package]:
                         if found:
                             break
                     if not found:
-                        logging.fatal(
-                            f'Could not find package for "{dep}"')
+                        logging.fatal(f'Could not find package for "{dep}"')
                         exit(1)
     selection = list(set(selection))
     packages = {package.name: package for package in selection}
@@ -201,7 +230,6 @@ def discover_packages(path: str) -> dict[str, Package]:
 def generate_package_order(packages: list[Package]) -> list[Package]:
     unsorted = packages.copy()
     sorted = []
-
     """
     It goes through all unsorted packages and checks if the dependencies have already been sorted.
     If that is true, the package itself is added to the sorted packages
@@ -227,13 +255,20 @@ def update_package_version_and_sources(package: Package):
     It is done here already, because doing it while host-compiling takes longer.
     We decided to even pin the commit of every -git package so this won't update any version, but it would if possible.
     """
-    cmd = makepkg_cmd+['--nobuild', '--noprepare', '--nodeps', '--skipinteg']
+    cmd = makepkg_cmd + [
+        '--nobuild',
+        '--noprepare',
+        '--nodeps',
+        '--skipinteg',
+    ]
     if not package.has_pkgver:
         cmd.append('--noextract')
     logging.info(f'Updating package version for {package.path}')
-    result = subprocess.run(cmd,
-                            env=makepkg_cross_env,
-                            cwd=package.path)
+    result = subprocess.run(
+        cmd,
+        env=makepkg_cross_env,
+        cwd=package.path,
+    )
     if result.returncode != 0:
         logging.fatal(f'Failed to update package version for {package.path}')
         exit(1)
@@ -242,13 +277,16 @@ def update_package_version_and_sources(package: Package):
 def check_package_version_built(package: Package) -> bool:
     built = True
 
-    result = subprocess.run(makepkg_cmd +
-                            ['--nobuild',
-                             '--noprepare',
-                             '--packagelist'],
-                            env=makepkg_cross_env,
-                            cwd=package.path,
-                            capture_output=True)
+    result = subprocess.run(
+        makepkg_cmd + [
+            '--nobuild',
+            '--noprepare',
+            '--packagelist',
+        ],
+        env=makepkg_cross_env,
+        cwd=package.path,
+        capture_output=True,
+    )
     if result.returncode != 0:
         logging.fatal(f'Failed to get package list for {package.path}')
         exit(1)
@@ -264,7 +302,6 @@ def check_package_version_built(package: Package) -> bool:
 
 def setup_dependencies_and_sources(package: Package):
     logging.info(f'Setting up dependencies and sources for {package.path}')
-
     """
     To make cross-compilation work for almost every package, the host needs to have the dependencies installed
     so that the build tools can be used
@@ -276,63 +313,89 @@ def setup_dependencies_and_sources(package: Package):
                 stderr=subprocess.DEVNULL,
             )
             if result.returncode != 0:
-                logging.fatal(
-                    f'Failed to setup dependencies for {package.path}')
+                logging.fatal(f'Failed to setup dependencies for {package.path}')
                 exit(1)
 
-    result = subprocess.run(makepkg_cmd +
-                            ['--nobuild',
-                             '--holdver',
-                             '--syncdeps'],
-                            env=makepkg_cross_env,
-                            cwd=package.path)
+    result = subprocess.run(
+        makepkg_cmd + [
+            '--nobuild',
+            '--holdver',
+            '--syncdeps',
+        ],
+        env=makepkg_cross_env,
+        cwd=package.path,
+    )
     if result.returncode != 0:
-        logging.fatal(
-            f'Failed to check sources for {package.path}')
+        logging.fatal(f'Failed to check sources for {package.path}')
         exit(1)
 
 
 def build_package(package: Package):
-    makepkg_compile_opts = ['--noextract',
-                            '--skipinteg',
-                            '--holdver',
-                            '--nodeps']
+    makepkg_compile_opts = [
+        '--noextract',
+        '--skipinteg',
+        '--holdver',
+        '--nodeps',
+    ]
 
     if package.mode == 'cross':
         logging.info(f'Cross-compiling {package.path}')
-        result = subprocess.run(makepkg_cmd+makepkg_compile_opts,
-                                env=makepkg_cross_env | {
-                                    'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
-                                cwd=package.path)
+        result = subprocess.run(
+            makepkg_cmd + makepkg_compile_opts,
+            env=makepkg_cross_env | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
+            cwd=package.path,
+        )
         if result.returncode != 0:
-            logging.fatal(
-                f'Failed to cross-compile package {package.path}')
+            logging.fatal(f'Failed to cross-compile package {package.path}')
             exit(1)
     else:
         logging.info(f'Host-compiling {package.path}')
 
         def umount():
-            subprocess.run(['umount', '-lc', '/chroot/copy'],
-                           stderr=subprocess.DEVNULL)
+            subprocess.run(
+                [
+                    'umount',
+                    '-lc',
+                    '/chroot/copy',
+                ],
+                stderr=subprocess.DEVNULL,
+            )
+
         atexit.register(umount)
 
-        result = subprocess.run(
-            ['mount', '-o', 'bind', '/chroot/copy', '/chroot/copy'])
+        result = subprocess.run([
+            'mount',
+            '-o',
+            'bind',
+            '/chroot/copy',
+            '/chroot/copy',
+        ])
         if result.returncode != 0:
             logging.fatal('Failed to bind mount chroot to itself')
             exit(1)
 
         os.makedirs('/chroot/copy/src')
-        result = subprocess.run(
-            ['mount', '-o', 'bind', '.', '/chroot/copy/src'])
+        result = subprocess.run([
+            'mount',
+            '-o',
+            'bind',
+            '.',
+            '/chroot/copy/src',
+        ])
         if result.returncode != 0:
-            logging.fatal(
-                f'Failed to bind mount folder to chroot')
+            logging.fatal(f'Failed to bind mount folder to chroot')
             exit(1)
 
         env = [f'{key}={value}' for key, value in makepkg_env.items()]
-        result = subprocess.run(
-            ['arch-chroot', '/chroot/copy', '/usr/bin/env'] + env + ['/bin/bash', '-c', f'cd /src/{package.path} && makepkg --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'])
+        result = subprocess.run([
+            'arch-chroot',
+            '/chroot/copy',
+            '/usr/bin/env',
+        ] + env + [
+            '/bin/bash',
+            '-c',
+            f'cd /src/{package.path} && makepkg --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}',
+        ])
         if result.returncode != 0:
             logging.fatal(f'Failed to host-compile package {package.path}')
             exit(1)
@@ -353,17 +416,18 @@ def add_package_to_repo(package: Package):
                 os.path.join(package.path, file),
                 os.path.join(dir, file),
             )
-            result = subprocess.run(['repo-add',
-                                     '--remove',
-                                     '--new',
-                                     '--prevent-downgrade',
-                                     os.path.join(
-                                         'prebuilts',
-                                         package.repo,
-                                         f'{package.repo}.db.tar.xz',
-                                     ),
-                                     os.path.join(dir, file),
-                                     ])
+            result = subprocess.run([
+                'repo-add',
+                '--remove',
+                '--new',
+                '--prevent-downgrade',
+                os.path.join(
+                    'prebuilts',
+                    package.repo,
+                    f'{package.repo}.db.tar.xz',
+                ),
+                os.path.join(dir, file),
+            ])
             if result.returncode != 0:
                 logging.fatal(f'Failed add package {package.path} to repo')
                 exit(1)
@@ -371,13 +435,9 @@ def add_package_to_repo(package: Package):
         for ext in ['db', 'files']:
             if os.path.exists(os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz')):
                 os.unlink(os.path.join('prebuilts', repo, f'{repo}.{ext}'))
-                shutil.copyfile(
-                    os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz'),
-                    os.path.join('prebuilts', repo, f'{repo}.{ext}')
-                )
+                shutil.copyfile(os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz'), os.path.join('prebuilts', repo, f'{repo}.{ext}'))
             if os.path.exists(os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz.old')):
-                os.unlink(os.path.join('prebuilts', repo,
-                          f'{repo}.{ext}.tar.xz.old'))
+                os.unlink(os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz.old'))
 
 
 @click.group(name='packages')
@@ -405,11 +465,9 @@ def cmd_build(verbose, path):
     if len(need_build) == 0:
         logging.info('Everything built already')
         return
-    logging.info('Building %s', ', '.join(
-        map(lambda x: x.path, need_build)))
+    logging.info('Building %s', ', '.join(map(lambda x: x.path, need_build)))
     with open('.last_built', 'w') as file:
-        file.write('\n'.join(
-            map(lambda x: x.path, need_build)))
+        file.write('\n'.join(map(lambda x: x.path, need_build)))
 
     for package in need_build:
         setup_chroot()
@@ -422,10 +480,13 @@ def cmd_build(verbose, path):
 @verbose_option
 def cmd_clean(verbose):
     setup_logging(verbose)
-    result = subprocess.run(['git',
-                             'clean',
-                             '-dffX',
-                             'main', 'device'])
+    result = subprocess.run([
+        'git',
+        'clean',
+        '-dffX',
+        'main',
+        'device',
+    ])
     if result.returncode != 0:
         logging.fatal(f'Failed to git clean')
         exit(1)
@@ -546,8 +607,7 @@ def cmd_check(verbose, path):
                         reason = f'Expected to find "{key}"'
 
                 if not formatted:
-                    logging.fatal(
-                        f'Line {line_index+1} in {os.path.join(package.path, "PKGBUILD")} is not formatted correctly: "{line}"')
+                    logging.fatal(f'Line {line_index+1} in {os.path.join(package.path, "PKGBUILD")} is not formatted correctly: "{line}"')
                     if reason != "":
                         logging.fatal(reason)
                     exit(1)

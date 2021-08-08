@@ -1,12 +1,8 @@
 import atexit
-from logging import root
 import os
-import shutil
-import signal
 import subprocess
-import time
 import click
-from logger import *
+from logger import logging, setup_logging, verbose_option
 from chroot import create_chroot, create_chroot_user
 
 devices = {
@@ -24,12 +20,10 @@ flavours = {
 
 def get_device_and_flavour() -> tuple[str, str]:
     if not os.path.exists('.device'):
-        logging.fatal(
-            f'Please set the device using \'kupferbootstrap image device ...\'')
+        logging.fatal(f'Please set the device using \'kupferbootstrap image device ...\'')
         exit(1)
     if not os.path.exists('.flavour'):
-        logging.fatal(
-            f'Please set the flavour using \'kupferbootstrap image flavour ...\'')
+        logging.fatal(f'Please set the flavour using \'kupferbootstrap image flavour ...\'')
         exit(1)
 
     with open('.device', 'r') as file:
@@ -50,14 +44,24 @@ def mount_rootfs_image(path):
         os.makedirs(rootfs_mount)
 
     def umount():
-        subprocess.run(['umount', '-lc', rootfs_mount],
-                       stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [
+                'umount',
+                '-lc',
+                rootfs_mount,
+            ],
+            stderr=subprocess.DEVNULL,
+        )
+
     atexit.register(umount)
 
-    result = subprocess.run(['mount',
-                             '-o', 'loop',
-                             path,
-                             rootfs_mount])
+    result = subprocess.run([
+        'mount',
+        '-o',
+        'loop',
+        path,
+        rootfs_mount,
+    ])
     if result.returncode != 0:
         logging.fatal(f'Failed to loop mount {path} to {rootfs_mount}')
         exit(1)
@@ -82,8 +86,7 @@ def cmd_device(verbose, device):
             break
 
     if device not in devices:
-        logging.fatal(
-            f'Unknown device {device}. Pick one from:\n{", ".join(devices.keys())}')
+        logging.fatal(f'Unknown device {device}. Pick one from:\n{", ".join(devices.keys())}')
         exit(1)
 
     logging.info(f'Setting device to {device}')
@@ -99,8 +102,7 @@ def cmd_flavour(verbose, flavour):
     setup_logging(verbose)
 
     if flavour not in flavours:
-        logging.fatal(
-            f'Unknown flavour {flavour}. Pick one from:\n{", ".join(flavours.keys())}')
+        logging.fatal(f'Unknown flavour {flavour}. Pick one from:\n{", ".join(flavours.keys())}')
         exit(1)
 
     logging.info(f'Setting flavour to {flavour}')
@@ -118,31 +120,47 @@ def cmd_build(verbose):
     image_name = get_image_name(device, flavour)
 
     if not os.path.exists(image_name):
-        result = subprocess.run(['fallocate',
-                                 '-l', '4G',
-                                 image_name])
+        result = subprocess.run([
+            'fallocate',
+            '-l',
+            '4G',
+            image_name,
+        ])
         if result.returncode != 0:
             logging.fatal(f'Failed to allocate {image_name}')
             exit(1)
 
-        result = subprocess.run(['mkfs.ext4',
-                                 '-L', 'kupfer',
-                                 image_name])
+        result = subprocess.run([
+            'mkfs.ext4',
+            '-L',
+            'kupfer',
+            image_name,
+        ])
         if result.returncode != 0:
             logging.fatal(f'Failed to create ext4 filesystem on {image_name}')
             exit(1)
 
     rootfs_mount = mount_rootfs_image(image_name)
 
-    create_chroot(rootfs_mount, packages=(['base', 'base-kupfer'] + devices[device] + flavours[flavour]), pacman_conf='/app/local/etc/pacman.conf', extra_repos={'main': {
-                  'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'}, 'device': {'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'}})
+    create_chroot(
+        rootfs_mount,
+        packages=(['base', 'base-kupfer'] + devices[device] + flavours[flavour]),
+        pacman_conf='/app/local/etc/pacman.conf',
+        extra_repos={
+            'main': {
+                'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo',
+            },
+            'device': {
+                'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo',
+            },
+        },
+    )
     create_chroot_user(rootfs_mount)
 
 
 """
 This doesn't work, because the mount isn't passed through to the real host
 """
-
 """
 @click.command(name='inspect')
 @verbose_option
