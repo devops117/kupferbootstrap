@@ -11,7 +11,7 @@ else:
     script_path = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(script_path, 'version.txt')) as version_file:
         version = version_file.read().replace('\n', '')
-        tag = f'gitlab.com/kupfer/kupferbootstrap:{version}'
+        tag = f'registry.gitlab.com/kupfer/kupferbootstrap:{version}'
         if version == 'dev':
             result = subprocess.run([
                 'docker',
