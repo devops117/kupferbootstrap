@@ -1,3 +1,4 @@
+from cmath import log
 from logger import *
 import atexit
 import click
@@ -7,6 +8,7 @@ import os
 import shutil
 import subprocess
 from chroot import create_chroot
+from joblib import Parallel, delayed
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
@@ -24,6 +26,7 @@ makepkg_cmd = ['makepkg',
                '--needed']
 
 pacman_cmd = ['pacman',
+              '-Syuu',
               '--noconfirm',
               '--overwrite=*',
               '--needed', ]
@@ -110,8 +113,7 @@ def setup_chroot(chroot_path='/chroot/root'):
 
     logging.info('Updating root chroot')
     result = subprocess.run(pacman_cmd +
-                            ['-Syuu',
-                             '--root', chroot_path,
+                            ['--root', chroot_path,
                              '--arch', 'aarch64',
                              '--config', chroot_path+'/etc/pacman.conf'])
     if result.returncode != 0:
@@ -139,7 +141,7 @@ def setup_chroot(chroot_path='/chroot/root'):
         exit(1)
 
 
-def discover_packages() -> dict[str, Package]:
+def discover_packages(path: str) -> dict[str, Package]:
     packages = {}
     paths = []
 
@@ -149,9 +151,9 @@ def discover_packages() -> dict[str, Package]:
         for dir2 in os.listdir(os.path.join('device', dir1)):
             paths.append(os.path.join('device', dir1, dir2))
 
-    for path in paths:
-        logging.debug(f'Discovered {path}')
-        package = Package(path)
+    results = Parallel(n_jobs=multiprocessing.cpu_count()*4)(
+        delayed(Package)(path) for path in paths)
+    for package in results:
         packages[package.name] = package
 
     # This filters the deps to only include the ones that are provided in this repo
@@ -168,6 +170,30 @@ def discover_packages() -> dict[str, Package]:
                     break
             if not found:
                 package.local_depends.remove(dep)
+
+    selection = []
+    for package in packages.values():
+        if path == 'all' or package.path == path:
+            selection.append(package)
+            for dep in package.local_depends:
+                if dep in packages:
+                    selection.append(packages[dep])
+                else:
+                    found = False
+                    for p in packages.values():
+                        for name in p.names:
+                            if dep == name:
+                                selection.append(p)
+                                found = True
+                                break
+                        if found:
+                            break
+                    if not found:
+                        logging.fatal(
+                            f'Could not find package for "{dep}"')
+                        exit(1)
+    selection = list(set(selection))
+    packages = {package.name: package for package in selection}
 
     return packages
 
@@ -246,7 +272,9 @@ def setup_dependencies_and_sources(package: Package):
     if package.mode == 'cross':
         for p in package.depends:
             result = subprocess.run(
-                pacman_cmd + ['-S', p], stderr=subprocess.DEVNULL)
+                pacman_cmd + [p],
+                stderr=subprocess.DEVNULL,
+            )
             if result.returncode != 0:
                 logging.fatal(
                     f'Failed to setup dependencies for {package.path}')
@@ -365,16 +393,7 @@ def cmd_build(verbose, path):
 
     check_prebuilts()
 
-    packages = discover_packages()
-
-    if path != 'all':
-        selection = []
-        for package in packages.values():
-            if package.path == path:
-                # TODO: currently matches through package.name only, no provides
-                selection += [packages[pkg]
-                              for pkg in package.local_depends] + [package]
-        packages = {package.name: package for package in selection}
+    packages = discover_packages(path)
 
     package_order = generate_package_order(list(packages.values()))
     need_build = []
@@ -412,5 +431,135 @@ def cmd_clean(verbose):
         exit(1)
 
 
+@click.command(name='check')
+@verbose_option
+@click.argument('path')
+def cmd_check(verbose, path):
+    setup_logging(verbose)
+
+    packages = discover_packages(path)
+
+    for name in packages:
+        package = packages[name]
+
+        is_git_package = False
+        if name.endswith('-git'):
+            is_git_package = True
+
+        mode_key = '_mode'
+        pkgbase_key = 'pkgbase'
+        pkgname_key = 'pkgname'
+        commit_key = '_commit'
+        source_key = 'source'
+        sha256sums_key = 'sha256sums'
+        required = {
+            mode_key: True,
+            pkgbase_key: False,
+            pkgname_key: True,
+            'pkgdesc': False,
+            'pkgver': True,
+            'pkgrel': True,
+            'arch': True,
+            'license': True,
+            'url': False,
+            'provides': False,
+            'conflicts': False,
+            'depends': False,
+            'optdepends': False,
+            'makedepends': False,
+            'install': False,
+            'options': False,
+            commit_key: is_git_package,
+            source_key: False,
+            sha256sums_key: False,
+        }
+
+        with open(os.path.join(package.path, 'PKGBUILD'), 'r') as file:
+            lines = file.read().split('\n')
+            if len(lines) == 0:
+                logging.fatal(f'Empty PKGBUILD for {package.path}')
+                exit(1)
+            line_index = 0
+            key_index = 0
+            hold_key = False
+            while True:
+                line = lines[line_index]
+
+                if line.startswith('_') and not line.startswith(mode_key) and not line.startswith(commit_key):
+                    line_index += 1
+                    continue
+
+                formatted = True
+                next_key = False
+                next_line = False
+                reason = ""
+
+                if hold_key:
+                    next_line = True
+                else:
+                    if key_index < len(required):
+                        key = list(required)[key_index]
+                        if line.startswith(key):
+                            if key == pkgbase_key:
+                                required[pkgname_key] = False
+                            if key == source_key:
+                                required[sha256sums_key] = True
+                            next_key = True
+                            next_line = True
+                        elif key in required and not required[key]:
+                            next_key = True
+
+                if line.endswith('=('):
+                    hold_key = True
+                if line == ')':
+                    hold_key = False
+                    next_key = True
+
+                if line.startswith('    ') or line == ')':
+                    next_line = True
+
+                if line.startswith('  ') and not line.startswith('    '):
+                    formatted = False
+                    reason = 'Multiline variables should be indented with 4 spaces'
+
+                if '"' in line and not '$' in line and not ' ' in line:
+                    formatted = False
+                    reason = f'Found literal " although no "$" or " " was found in the line justifying the usage of a literal "'
+
+                if '\'' in line:
+                    formatted = False
+                    reason = 'Found literal \' although either a literal " or no qoutes should be used'
+
+                if ('=(' in line and ' ' in line and not line.endswith('=(')) or (hold_key and line.endswith(')')):
+                    formatted = False
+                    reason = f'Multiple elements in a list need to be in separate lines'
+
+                if formatted and not next_key and not next_line:
+                    if key_index == len(required):
+                        if lines[line_index] == '':
+                            break
+                        else:
+                            formatted = False
+                            reason = 'Expected final emtpy line after all variables'
+                    else:
+                        formatted = False
+                        reason = f'Expected to find "{key}"'
+
+                if not formatted:
+                    logging.fatal(
+                        f'Line {line_index+1} in {os.path.join(package.path, "PKGBUILD")} is not formatted correctly: "{line}"')
+                    if reason != "":
+                        logging.fatal(reason)
+                    exit(1)
+
+                if next_key and not hold_key:
+                    key_index += 1
+                if next_line:
+                    line_index += 1
+
+        logging.info(f'{package.path} nicely formatted!')
+
+
 cmd_packages.add_command(cmd_build)
 cmd_packages.add_command(cmd_clean)
+cmd_packages.add_command(cmd_check)
