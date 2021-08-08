@@ -18,14 +18,10 @@ RUN cd /tmp && \
 RUN yes | pacman -Scc
 
 RUN sed -i "s/SigLevel.*/SigLevel = Never/g" /etc/pacman.conf
-RUN mkdir -p /app/bin
-RUN ln -sf $(which aarch64-linux-gnu-strip) /app/bin/strip
-
-RUN systemd-machine-id-setup
 
 ENV KUPFERBOOTSTRAP_DOCKER=1
+ENV PATH=/app/bin:/app/local/bin:$PATH
 WORKDIR /app
-ENV PATH=/app/bin:$PATH
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt

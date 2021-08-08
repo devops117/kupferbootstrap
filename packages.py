@@ -14,11 +14,11 @@ makepkg_env = os.environ.copy() | {
 }
 
 makepkg_cross_env = makepkg_env | {
-     'PACMAN': '/app/bin/pacman_aarch64'
+    'PACMAN': '/app/local/bin/pacman_aarch64'
 }
 
 makepkg_cmd = ['makepkg',
-               '--config', '/app/src/makepkg.conf',
+               '--config', '/app/local/etc/makepkg.conf',
                '--noconfirm',
                '--ignorearch',
                '--needed']
@@ -105,7 +105,8 @@ def check_prebuilts():
 
 def setup_chroot(chroot_path='/chroot/root'):
     logging.info('Initializing root chroot')
-    create_chroot(chroot_path, packages=['base-devel'], pacman_conf='/app/src/pacman.conf', extra_repos={'main': {'Server': 'file:///src/prebuilts/main'}, 'device': {'Server': 'file:///src/prebuilts/device'}})
+    create_chroot(chroot_path, packages=['base-devel'], pacman_conf='/app/local/etc/pacman.conf', extra_repos={
+                  'main': {'Server': 'file:///src/prebuilts/main'}, 'device': {'Server': 'file:///src/prebuilts/device'}})
 
     logging.info('Updating root chroot')
     result = subprocess.run(pacman_cmd +
@@ -244,7 +245,8 @@ def setup_dependencies_and_sources(package: Package):
     """
     if package.mode == 'cross':
         for p in package.depends:
-            result = subprocess.run(pacman_cmd + ['-S', p], stderr=subprocess.DEVNULL)
+            result = subprocess.run(
+                pacman_cmd + ['-S', p], stderr=subprocess.DEVNULL)
             if result.returncode != 0:
                 logging.fatal(
                     f'Failed to setup dependencies for {package.path}')
@@ -302,7 +304,7 @@ def build_package(package: Package):
 
         env = [f'{key}={value}' for key, value in makepkg_env.items()]
         result = subprocess.run(
-            ['arch-chroot', '/chroot/copy', '/usr/bin/env'] + env + [ '/bin/bash', '-c', f'cd /src/{package.path} && makepkg --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'])
+            ['arch-chroot', '/chroot/copy', '/usr/bin/env'] + env + ['/bin/bash', '-c', f'cd /src/{package.path} && makepkg --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'])
         if result.returncode != 0:
             logging.fatal(f'Failed to host-compile package {package.path}')
             exit(1)
@@ -370,8 +372,9 @@ def cmd_build(verbose, path):
         for package in packages.values():
             if package.path == path:
                 # TODO: currently matches through package.name only, no provides
-                selection += [ packages[pkg] for pkg in package.local_depends ] + [package]
-        packages = { package.name:package for package in selection }
+                selection += [packages[pkg]
+                              for pkg in package.local_depends] + [package]
+        packages = {package.name: package for package in selection}
 
     package_order = generate_package_order(list(packages.values()))
     need_build = []
@@ -394,7 +397,6 @@ def cmd_build(verbose, path):
         setup_dependencies_and_sources(package)
         build_package(package)
         add_package_to_repo(package)
-
 
 
 @click.command(name='clean')
