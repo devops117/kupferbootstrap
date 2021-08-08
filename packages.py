@@ -308,13 +308,11 @@ def setup_dependencies_and_sources(package: Package):
     """
     if package.mode == 'cross':
         for p in package.depends:
-            result = subprocess.run(
+            # Don't check for errors here because there might be packages that are listed as dependencies but are not available on x86_64
+            subprocess.run(
                 pacman_cmd + [p],
                 stderr=subprocess.DEVNULL,
             )
-            if result.returncode != 0:
-                logging.fatal(f'Failed to setup dependencies for {package.path}')
-                exit(1)
 
     result = subprocess.run(
         makepkg_cmd + [
