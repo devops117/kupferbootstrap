@@ -58,8 +58,6 @@ else:
 
         atexit.register(at_exit)
 
-        # TODO: Remove the mount of /usr/share/i18n/locales. It's a trick so we don't need to generate the locales in the chroot.
-        # Something like a prebuilt docker image as base or copying the files from it would be good.
         subprocess.run([
             'docker',
             'run',
@@ -80,6 +78,4 @@ else:
             '-v',
             '/dev:/dev',
             #'-v', '/mnt/kupfer:/mnt/kupfer:z',
-            '-v',
-            '/usr/share/i18n/locales:/usr/share/i18n/locales:ro'
         ] + [tag, 'kupferbootstrap'] + sys.argv[1:])

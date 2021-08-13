@@ -338,6 +338,28 @@ def build_package(package: Package):
 
     if package.mode == 'cross':
         logging.info(f'Cross-compiling {package.path}')
+
+        def umount():
+            subprocess.run(
+                [
+                    'umount',
+                    '-lc',
+                    '/usr/share/i18n/locales',
+                ],
+                stderr=subprocess.DEVNULL,
+            )
+
+        result = subprocess.run([
+            'mount',
+            '-o',
+            'bind',
+            '/chroot/copy/usr/share/i18n/locales',
+            '/usr/share/i18n/locales',
+        ])
+        if result.returncode != 0:
+            logging.fatal(f'Failed to bind mount glibc locales from chroot')
+            exit(1)
+
         result = subprocess.run(
             makepkg_cmd + makepkg_compile_opts,
             env=makepkg_cross_env | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
