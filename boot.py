@@ -2,6 +2,7 @@ import os
 import urllib.request
 from image import get_device_and_flavour, get_image_name
 from logger import logging, setup_logging, verbose_option
+from flash import dump_bootimg, erase_dtbo
 import click
 import subprocess
 
@@ -15,20 +16,6 @@ boot_strategies = {
     'xiaomi-beryllium-ebbg': FASTBOOT,
     'xiaomi-beryllium-tianma': FASTBOOT,
 }
-
-
-def dump_bootimg(image_name: str) -> str:
-    path = '/tmp/boot.img'
-    result = subprocess.run([
-        'debugfs',
-        image_name,
-        '-R',
-        f'dump /boot/boot.img {path}',
-    ])
-    if result.returncode != 0:
-        logging.fatal(f'Faild to dump boot.img')
-        exit(1)
-    return path
 
 
 @click.command(name='boot', help=f'Leave TYPE empty or choose \'{JUMPDRIVE}\'')
@@ -49,7 +36,13 @@ def cmd_boot(verbose, type):
         else:
             path = dump_bootimg(image_name)
 
-        result = subprocess.run(['fastboot', 'boot', path])
+        erase_dtbo()
+
+        result = subprocess.run([
+            'fastboot',
+            'boot',
+            path,
+        ])
         if result.returncode != 0:
             logging.fatal(f'Failed to boot {path} using fastboot')
             exit(1)
