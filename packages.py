@@ -41,7 +41,6 @@ class Package:
     local_depends = None
     repo = ''
     mode = ''
-    has_pkgver = False
 
     def __init__(self, path: str) -> None:
         self.path = path
@@ -80,14 +79,6 @@ class Package:
             logging.fatal(f'Package {self.path} has an invalid mode configured: \'{mode}\'')
             exit(1)
         self.mode = mode
-
-        has_pkgver = False
-        with open(os.path.join(self.path, 'PKGBUILD'), 'r') as file:
-            for line in file.read().split('\n'):
-                if line.startswith('pkgver()'):
-                    has_pkgver = True
-                    break
-        self.has_pkgver = has_pkgver
 
 
 def check_prebuilts():
@@ -172,7 +163,7 @@ def setup_chroot(chroot_path='/chroot/root'):
         exit(1)
 
 
-def discover_packages(path: str) -> dict[str, Package]:
+def discover_packages(package_paths: list[str]) -> dict[str, Package]:
     packages = {}
     paths = []
 
@@ -203,7 +194,7 @@ def discover_packages(path: str) -> dict[str, Package]:
 
     selection = []
     for package in packages.values():
-        if path == 'all' or package.path == path:
+        if 'all' in package_paths or package.path in package_paths:
             selection.append(package)
             for dep in package.local_depends:
                 if dep in packages:
@@ -247,31 +238,6 @@ def generate_package_order(packages: list[Package]) -> list[Package]:
                             p.local_depends.remove(name)
 
     return sorted
-
-
-def update_package_version_and_sources(package: Package):
-    """
-    This updates the package version and the sources.
-    It is done here already, because doing it while host-compiling takes longer.
-    We decided to even pin the commit of every -git package so this won't update any version, but it would if possible.
-    """
-    cmd = makepkg_cmd + [
-        '--nobuild',
-        '--noprepare',
-        '--nodeps',
-        '--skipinteg',
-    ]
-    if not package.has_pkgver:
-        cmd.append('--noextract')
-    logging.info(f'Updating package version for {package.path}')
-    result = subprocess.run(
-        cmd,
-        env=makepkg_cross_env,
-        cwd=package.path,
-    )
-    if result.returncode != 0:
-        logging.fatal(f'Failed to update package version for {package.path}')
-        exit(1)
 
 
 def check_package_version_built(package: Package) -> bool:
@@ -467,18 +433,18 @@ def cmd_packages():
 
 @click.command(name='build')
 @verbose_option
-@click.argument('path')
-def cmd_build(verbose, path):
+@click.argument('paths', nargs=-1)
+def cmd_build(verbose, paths):
     setup_logging(verbose)
 
     check_prebuilts()
 
-    packages = discover_packages(path)
+    paths = list(paths)
+    packages = discover_packages(paths)
 
     package_order = generate_package_order(list(packages.values()))
     need_build = []
     for package in package_order:
-        update_package_version_and_sources(package)
         if not check_package_version_built(package):
             need_build.append(package)
 
@@ -514,11 +480,12 @@ def cmd_clean(verbose):
 
 @click.command(name='check')
 @verbose_option
-@click.argument('path')
-def cmd_check(verbose, path):
+@click.argument('paths', nargs=-1)
+def cmd_check(verbose, paths):
     setup_logging(verbose)
 
-    packages = discover_packages(path)
+    paths = list(paths)
+    packages = discover_packages(paths)
 
     for name in packages:
         package = packages[name]
