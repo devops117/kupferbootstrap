@@ -510,7 +510,7 @@ def cmd_check(verbose, paths):
             'arch': True,
             'license': True,
             'url': False,
-            'provides': False,
+            'provides': is_git_package,
             'conflicts': False,
             'depends': False,
             'optdepends': False,
