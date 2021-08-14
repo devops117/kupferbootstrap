@@ -142,18 +142,30 @@ def cmd_build(verbose):
 
     rootfs_mount = mount_rootfs_image(image_name)
 
+    extra_repos = {
+        'main': {
+            'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo',
+        },
+        'device': {
+            'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo',
+        },
+    }
+
+    if os.path.exists('/prebuilts'):
+        extra_repos = {
+            'main': {
+                'Server': 'file:///prebuilts/$repo',
+            },
+            'device': {
+                'Server': 'file:///prebuilts/$repo',
+            },
+        }
+
     create_chroot(
         rootfs_mount,
         packages=(['base', 'base-kupfer'] + devices[device] + flavours[flavour]),
         pacman_conf='/app/local/etc/pacman.conf',
-        extra_repos={
-            'main': {
-                'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo',
-            },
-            'device': {
-                'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo',
-            },
-        },
+        extra_repos=extra_repos,
     )
     create_chroot_user(rootfs_mount)
 

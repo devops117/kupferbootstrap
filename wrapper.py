@@ -58,6 +58,13 @@ else:
 
         atexit.register(at_exit)
 
+        prebuilts_mount = []
+        if os.getenv('KUPFERBOOTSTRAP_PREBUILTS') != '':
+            prebuilts_mount = [
+                '-v',
+                f'{os.getenv("KUPFERBOOTSTRAP_PREBUILTS")}:/prebuilts:z',
+            ]
+
         subprocess.run([
             'docker',
             'run',
@@ -69,6 +76,7 @@ else:
             '--privileged',
             '-v',
             f'{os.getcwd()}:/src:z',
+        ] + prebuilts_mount + [
             '-v',
             f'{os.path.join(appdirs.user_cache_dir("kupfer"),"chroot")}:/chroot:z',
             '-v',
