@@ -226,16 +226,24 @@ def generate_package_order(packages: list[Package]) -> list[Package]:
     If that is true, the package itself is added to the sorted packages
     """
     while len(unsorted) > 0:
+        changed = False
         for package in unsorted.copy():
             if len(package.local_depends) == 0:
                 sorted.append(package)
                 unsorted.remove(package)
+                changed = True
         for package in sorted:
             for name in package.names:
                 for p in unsorted:
                     for dep in p.local_depends.copy():
                         if name == dep:
                             p.local_depends.remove(name)
+                            changed = True
+        if not changed:
+            print('emergency break:', 'sorted:', repr(sorted), 'unsorted:', repr(unsorted))
+            sorted += unsorted
+            print('merged:', repr(sorted))
+            break
 
     return sorted
 
