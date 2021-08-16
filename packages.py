@@ -87,6 +87,9 @@ class Package:
             exit(1)
         self.mode = mode
 
+    def __repr__(self):
+        return f'package({self.name},{repr(self.names)})'
+
 
 def check_prebuilts():
     if not os.path.exists('prebuilts'):
