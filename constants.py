@@ -29,6 +29,7 @@ DEVICES = {
 
 FLAVOURS = {
     'barebone': [],
+    'debug-shell': ['hook-debug-shell'],
     'phosh': [],
     'plasma-mobile': [],
 }
