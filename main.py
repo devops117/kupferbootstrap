@@ -5,6 +5,7 @@ from boot import cmd_boot
 from flash import cmd_flash
 from ssh import cmd_ssh
 from forwarding import cmd_forwarding
+from telnet import cmd_telnet
 import click
 
 
@@ -20,3 +21,4 @@ cli.add_command(cmd_boot)
 cli.add_command(cmd_flash)
 cli.add_command(cmd_ssh)
 cli.add_command(cmd_forwarding)
+cli.add_command(cmd_telnet)

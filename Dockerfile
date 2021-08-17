@@ -2,10 +2,10 @@ FROM archlinux:base-devel
 
 RUN pacman -Syu --noconfirm \
     python python-pip \
-    devtools rsync \
+    arch-install-scripts rsync \
     aarch64-linux-gnu-gcc aarch64-linux-gnu-binutils aarch64-linux-gnu-glibc aarch64-linux-gnu-linux-api-headers \
     git \
-    android-tools
+    android-tools openssh inetutils
 
 RUN sed -i "s/EUID == 0/EUID == -1/g" $(which makepkg)
 
