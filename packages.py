@@ -55,11 +55,18 @@ class Package:
         lines = result.stdout.decode('utf-8').split('\n')
         names = []
         depends = []
+        multi_pkgs = False
+
         for line_raw in lines:
             line = line_raw.lstrip()
-            if line.startswith('pkgname'):
+            if line.startswith('pkgbase'):
                 self.name = line.split(' = ')[1]
                 names.append(self.name)
+                multi_pkgs = True
+            if line.startswith('pkgname'):
+                names.append(line.split(' = ')[1])
+                if not multi_pkgs:
+                    self.name = line.split(' = ')[1]
             if line.startswith('pkgbase') or line.startswith('provides'):
                 names.append(line.split(' = ')[1])
             if line.startswith('depends') or line.startswith('makedepends') or line.startswith('checkdepends') or line.startswith('optdepends'):
@@ -191,29 +198,38 @@ def discover_packages(package_paths: list[str]) -> dict[str, Package]:
                     break
             if not found:
                 package.local_depends.remove(dep)
-
+    """
+    This figures out all dependencies and their sub-dependencies for the selection and adds those packages to the selection.
+    First the top-level packages get selected by searching the paths.
+    Then their dependencies and sub-dependencies and so on get added to the selection.
+    """
     selection = []
+    deps = []
     for package in packages.values():
         if 'all' in package_paths or package.path in package_paths:
-            selection.append(package)
-            for dep in package.local_depends:
-                if dep in packages:
-                    selection.append(packages[dep])
-                else:
-                    found = False
-                    for p in packages.values():
-                        for name in p.names:
-                            if dep == name:
-                                selection.append(p)
-                                found = True
-                                break
-                        if found:
-                            break
-                    if not found:
-                        logging.fatal(f'Could not find package for "{dep}"')
-                        exit(1)
+            deps.append(package.name)
+    while len(deps) > 0:
+        for dep in deps.copy():
+            found = False
+            for p in packages.values():
+                for name in p.names:
+                    if name == dep:
+                        selection.append(packages[p.name])
+                        deps.remove(dep)
+                        # Add the sub-dependencies
+                        deps += p.local_depends
+                        found = True
+                        break
+                if found:
+                    break
+            if not found:
+                logging.fatal(f'Failed to find dependency {dep}')
+                exit(1)
+
     selection = list(set(selection))
     packages = {package.name: package for package in selection}
+
+    logging.debug(f'Figured out selection: {list(map(lambda p: p.path, selection))}')
 
     return packages
 
@@ -460,8 +476,6 @@ def cmd_build(verbose, paths):
         logging.info('Everything built already')
         return
     logging.info('Building %s', ', '.join(map(lambda x: x.path, need_build)))
-    with open('.last_built', 'w') as file:
-        file.write('\n'.join(map(lambda x: x.path, need_build)))
 
     for package in need_build:
         setup_chroot()
@@ -523,6 +537,7 @@ def cmd_check(verbose, paths):
             'depends': False,
             'optdepends': False,
             'makedepends': False,
+            'backup': False,
             'install': False,
             'options': False,
             commit_key: is_git_package,
