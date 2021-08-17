@@ -4,18 +4,7 @@ import subprocess
 import click
 from logger import logging, setup_logging, verbose_option
 from chroot import create_chroot, create_chroot_user
-
-devices = {
-    'oneplus-enchilada': ['sdm845-oneplus-enchilada'],
-    'xiaomi-beryllium-ebbg': ['sdm845-xiaomi-beryllium-ebbg'],
-    'xiaomi-beryllium-tianma': ['sdm845-xiaomi-beryllium-tianma'],
-}
-
-flavours = {
-    'barebone': [],
-    'phosh': [],
-    'plasma-mobile': [],
-}
+from constants import DEVICES, FLAVOURS
 
 
 def get_device_and_flavour() -> tuple[str, str]:
@@ -69,6 +58,51 @@ def mount_rootfs_image(path):
     return rootfs_mount
 
 
+def dump_bootimg(image_name: str) -> str:
+    path = '/tmp/boot.img'
+    result = subprocess.run([
+        'debugfs',
+        image_name,
+        '-R',
+        f'dump /boot/boot.img {path}',
+    ])
+    if result.returncode != 0:
+        logging.fatal(f'Faild to dump boot.img')
+        exit(1)
+    return path
+
+
+def dump_lk2nd(image_name: str) -> str:
+    """
+    This doesn't append the image with the appended DTB which is needed for some devices, so it should get added in the future.
+    """
+    path = '/tmp/lk2nd.img'
+    result = subprocess.run([
+        'debugfs',
+        image_name,
+        '-R',
+        f'dump /boot/lk2nd.img {path}',
+    ])
+    if result.returncode != 0:
+        logging.fatal(f'Faild to dump lk2nd.img')
+        exit(1)
+    return path
+
+
+def dump_qhypstub(image_name: str) -> str:
+    path = '/tmp/qhypstub.bin'
+    result = subprocess.run([
+        'debugfs',
+        image_name,
+        '-R',
+        f'dump /boot/qhypstub.bin {path}',
+    ])
+    if result.returncode != 0:
+        logging.fatal(f'Faild to dump qhypstub.bin')
+        exit(1)
+    return path
+
+
 @click.group(name='image')
 def cmd_image():
     pass
@@ -80,13 +114,13 @@ def cmd_image():
 def cmd_device(verbose, device):
     setup_logging(verbose)
 
-    for key in devices.keys():
+    for key in DEVICES.keys():
         if '-'.join(key.split('-')[1:]) == device:
             device = key
             break
 
-    if device not in devices:
-        logging.fatal(f'Unknown device {device}. Pick one from:\n{", ".join(devices.keys())}')
+    if device not in DEVICES:
+        logging.fatal(f'Unknown device {device}. Pick one from:\n{", ".join(DEVICES.keys())}')
         exit(1)
 
     logging.info(f'Setting device to {device}')
@@ -101,8 +135,8 @@ def cmd_device(verbose, device):
 def cmd_flavour(verbose, flavour):
     setup_logging(verbose)
 
-    if flavour not in flavours:
-        logging.fatal(f'Unknown flavour {flavour}. Pick one from:\n{", ".join(flavours.keys())}')
+    if flavour not in FLAVOURS:
+        logging.fatal(f'Unknown flavour {flavour}. Pick one from:\n{", ".join(FLAVOURS.keys())}')
         exit(1)
 
     logging.info(f'Setting flavour to {flavour}')
@@ -163,7 +197,7 @@ def cmd_build(verbose):
 
     create_chroot(
         rootfs_mount,
-        packages=(['base', 'base-kupfer'] + devices[device] + flavours[flavour]),
+        packages=['base', 'base-kupfer'] + DEVICES[device] + FLAVOURS[flavour],
         pacman_conf='/app/local/etc/pacman.conf',
         extra_repos=extra_repos,
     )

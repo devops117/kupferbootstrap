@@ -1,46 +1,13 @@
 import atexit
-from cmath import log
-from email.mime import image
+from constants import BOOTIMG, LK2ND, LOCATIONS, QHYPSTUB, ROOTFS
+from fastboot import fastboot_flash
 import shutil
-from image import get_device_and_flavour, get_image_name
+from image import dump_bootimg, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name
 import os
 import subprocess
 import click
 import tempfile
 from logger import logging, setup_logging, verbose_option
-
-ROOTFS = 'rootfs'
-BOOTIMG = 'bootimg'
-
-EMMC = 'emmc'
-EMMCFILE = 'emmc-file'
-MICROSD = 'microsd'
-locations = [EMMC, EMMCFILE, MICROSD]
-
-
-def dump_bootimg(image_name: str) -> str:
-    path = '/tmp/boot.img'
-    result = subprocess.run([
-        'debugfs',
-        image_name,
-        '-R',
-        f'dump /boot/boot.img {path}',
-    ])
-    if result.returncode != 0:
-        logging.fatal(f'Faild to dump boot.img')
-        exit(1)
-    return path
-
-
-def erase_dtbo():
-    result = subprocess.run([
-        'fastboot',
-        'erase',
-        'dtbo',
-    ])
-    if result.returncode != 0:
-        logging.info(f'Failed to erase dtbo')
-        exit(1)
 
 
 @click.command(name='flash')
@@ -57,8 +24,8 @@ def cmd_flash(verbose, what, location):
         if location == None:
             logging.info(f'You need to specify a location to flash {what} to')
             exit(1)
-        if location not in locations:
-            logging.info(f'Invalid location {location}. Choose one of {", ".join(locations)} for location')
+        if location not in LOCATIONS:
+            logging.info(f'Invalid location {location}. Choose one of {", ".join(LOCATIONS)} for location')
             exit(1)
 
         path = ''
@@ -168,15 +135,13 @@ def cmd_flash(verbose, what, location):
 
     elif what == BOOTIMG:
         path = dump_bootimg(image_name)
-        result = subprocess.run([
-            'fastboot',
-            'flash',
-            'boot',
-            path,
-        ])
-        if result.returncode != 0:
-            logging.info(f'Failed to flash boot.img')
-            exit(1)
+        fastboot_flash('boot', path)
+    elif what == LK2ND:
+        path = dump_lk2nd(image_name)
+        fastboot_flash('lk2nd', path)
+    elif what == QHYPSTUB:
+        path = dump_qhypstub(image_name)
+        fastboot_flash('qhypstub', path)
     else:
         logging.fatal(f'Unknown what {what}')
         exit(1)

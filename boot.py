@@ -1,24 +1,13 @@
 import os
 import urllib.request
-from image import get_device_and_flavour, get_image_name
-from logger import logging, setup_logging, verbose_option
-from flash import dump_bootimg, erase_dtbo
+from image import get_device_and_flavour, get_image_name, dump_bootimg, dump_lk2nd
+from logger import setup_logging, verbose_option
+from fastboot import fastboot_boot, fastboot_erase_dtbo
+from constants import BOOT_STRATEGIES, FASTBOOT, JUMPDRIVE, LK2ND, JUMPDRIVE_VERSION
 import click
-import subprocess
-
-FASTBOOT = 'fastboot'
-
-JUMPDRIVE = 'jumpdrive'
-jumpdrive_version = '0.8'
-
-boot_strategies = {
-    'oneplus-enchilada': FASTBOOT,
-    'xiaomi-beryllium-ebbg': FASTBOOT,
-    'xiaomi-beryllium-tianma': FASTBOOT,
-}
 
 
-@click.command(name='boot', help=f'Leave TYPE empty or choose \'{JUMPDRIVE}\'')
+@click.command(name='boot')
 @verbose_option
 @click.argument('type', required=False)
 def cmd_boot(verbose, type):
@@ -26,23 +15,18 @@ def cmd_boot(verbose, type):
 
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
-    strategy = boot_strategies[device]
+    strategy = BOOT_STRATEGIES[device]
 
     if strategy == FASTBOOT:
         if type == JUMPDRIVE:
             file = f'boot-{device}.img'
             path = os.path.join('/var/cache/jumpdrive', file)
-            urllib.request.urlretrieve(f'https://github.com/dreemurrs-embedded/Jumpdrive/releases/download/{jumpdrive_version}/{file}', path)
+            if not os.path.exists(path):
+                urllib.request.urlretrieve(f'https://github.com/dreemurrs-embedded/Jumpdrive/releases/download/{JUMPDRIVE_VERSION}/{file}', path)
+        elif type == LK2ND:
+            path = dump_lk2nd(image_name)
         else:
             path = dump_bootimg(image_name)
 
-        erase_dtbo()
-
-        result = subprocess.run([
-            'fastboot',
-            'boot',
-            path,
-        ])
-        if result.returncode != 0:
-            logging.fatal(f'Failed to boot {path} using fastboot')
-            exit(1)
+        fastboot_erase_dtbo()
+        fastboot_boot(path)
