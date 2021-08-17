@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import appdirs
+import uuid
 
 if os.getenv('KUPFERBOOTSTRAP_DOCKER') == '1':
     from main import cli
@@ -44,13 +45,14 @@ else:
                     'pull',
                     tag,
                 ])
+        container_name = f'kupferbootstrap-{str(uuid.uuid4())}'
 
         def at_exit():
             subprocess.run(
                 [
                     'docker',
                     'kill',
-                    'kupferbootstrap',
+                    container_name,
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -65,11 +67,11 @@ else:
                 f'{os.getenv("KUPFERBOOTSTRAP_PREBUILTS")}:/prebuilts:z',
             ]
 
-        subprocess.run([
+        result = subprocess.run([
             'docker',
             'run',
             '--name',
-            'kupferbootstrap',
+            container_name,
             '--rm',
             '--interactive',
             '--tty',
@@ -87,3 +89,5 @@ else:
             '/dev:/dev',
             #'-v', '/mnt/kupfer:/mnt/kupfer:z',
         ] + [tag, 'kupferbootstrap'] + sys.argv[1:])
+
+        exit(result.returncode)
