@@ -620,7 +620,7 @@ def cmd_check(verbose, paths):
                     formatted = False
                     reason = 'Found literal \' although either a literal " or no qoutes should be used'
 
-                if ('=(' in line and ' ' in line and not line.endswith('=(')) or (hold_key and line.endswith(')')):
+                if ('=(' in line and ' ' in line and not '"' in line and not line.endswith('=(')) or (hold_key and line.endswith(')')):
                     formatted = False
                     reason = f'Multiple elements in a list need to be in separate lines'
 
