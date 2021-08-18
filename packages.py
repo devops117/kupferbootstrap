@@ -212,7 +212,15 @@ def discover_packages(package_paths: list[str]) -> dict[str, Package]:
     while len(deps) > 0:
         for dep in deps.copy():
             found = False
+            for p in selection:
+                for name in p.names:
+                    if name == dep:
+                        deps.remove(dep)
+                        found = True
+                        break
             for p in packages.values():
+                if found:
+                    break
                 for name in p.names:
                     if name == dep:
                         selection.append(packages[p.name])
@@ -221,8 +229,6 @@ def discover_packages(package_paths: list[str]) -> dict[str, Package]:
                         deps += p.local_depends
                         found = True
                         break
-                if found:
-                    break
             if not found:
                 logging.fatal(f'Failed to find dependency {dep}')
                 exit(1)
