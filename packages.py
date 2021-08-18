@@ -1,3 +1,4 @@
+from constants import REPOSITORIES
 from logger import setup_logging, verbose_option
 import atexit
 import click
@@ -70,7 +71,7 @@ class Package:
             if line.startswith('pkgbase') or line.startswith('provides'):
                 names.append(line.split(' = ')[1])
             if line.startswith('depends') or line.startswith('makedepends') or line.startswith('checkdepends') or line.startswith('optdepends'):
-                depends.append(line.split(' = ')[1].split('=')[0])
+                depends.append(line.split(' = ')[1].split('=')[0].split(': ')[0])
         self.names = list(set(names))
         self.depends = list(set(depends))
 
@@ -94,7 +95,7 @@ class Package:
 def check_prebuilts():
     if not os.path.exists('prebuilts'):
         os.makedirs('prebuilts')
-    for repo in ['main', 'device']:
+    for repo in REPOSITORIES:
         if not os.path.exists(os.path.join('prebuilts', repo)):
             os.makedirs(os.path.join('prebuilts', repo))
         for ext1 in ['db', 'files']:
@@ -117,18 +118,16 @@ def check_prebuilts():
 
 def setup_chroot(chroot_path='/chroot/root'):
     logging.info('Initializing root chroot')
+    extra_repos = {}
+    for repo in REPOSITORIES:
+        extra_repos[repo] = {
+            'Server': f'file:///src/prebuilts/{repo}',
+        }
     create_chroot(
         chroot_path,
         packages=['base-devel'],
         pacman_conf='/app/local/etc/pacman.conf',
-        extra_repos={
-            'main': {
-                'Server': 'file:///src/prebuilts/main',
-            },
-            'device': {
-                'Server': 'file:///src/prebuilts/device',
-            },
-        },
+        extra_repos=extra_repos,
     )
 
     logging.info('Updating root chroot')
@@ -177,11 +176,9 @@ def discover_packages(package_paths: list[str]) -> dict[str, Package]:
     packages = {}
     paths = []
 
-    for dir in os.listdir('main'):
-        paths.append(os.path.join('main', dir))
-    for dir1 in os.listdir('device'):
-        for dir2 in os.listdir(os.path.join('device', dir1)):
-            paths.append(os.path.join('device', dir1, dir2))
+    for repo in REPOSITORIES:
+        for dir in os.listdir(repo):
+            paths.append(os.path.join(repo, dir))
 
     results = Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(Package)(path) for path in paths)
     for package in results:
@@ -200,6 +197,7 @@ def discover_packages(package_paths: list[str]) -> dict[str, Package]:
                 if found:
                     break
             if not found:
+                logging.debug(f'Removing {dep} from dependencies')
                 package.local_depends.remove(dep)
     """
     This figures out all dependencies and their sub-dependencies for the selection and adds those packages to the selection.
@@ -444,7 +442,7 @@ def add_package_to_repo(package: Package):
             if result.returncode != 0:
                 logging.fatal(f'Failed add package {package.path} to repo')
                 exit(1)
-    for repo in ['main', 'device']:
+    for repo in REPOSITORIES:
         for ext in ['db', 'files']:
             if os.path.exists(os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz')):
                 os.unlink(os.path.join('prebuilts', repo, f'{repo}.{ext}'))
@@ -495,9 +493,7 @@ def cmd_clean(verbose):
         'git',
         'clean',
         '-dffX',
-        'main',
-        'device',
-    ])
+    ] + REPOSITORIES)
     if result.returncode != 0:
         logging.fatal(f'Failed to git clean')
         exit(1)
@@ -556,6 +552,7 @@ def cmd_check(verbose, paths):
             line_index = 0
             key_index = 0
             hold_key = False
+            key = ""
             while True:
                 line = lines[line_index]
 
@@ -583,11 +580,24 @@ def cmd_check(verbose, paths):
                         elif key in required and not required[key]:
                             next_key = True
 
-                if line.endswith('=('):
-                    hold_key = True
                 if line == ')':
                     hold_key = False
                     next_key = True
+
+                if package.repo != 'main':
+                    missing_prefix = False
+                    if key == pkgbase_key or (key == pkgname_key and required[pkgname_key]):
+                        if not line.split('=')[1].startswith(f'{package.repo}-') and not line.split('=')[1].startswith(f'"{package.repo}-'):
+                            missing_prefix = True
+                    if key == pkgname_key and hold_key and not required[pkgname_key]:
+                        if not line[4:].startswith(f'{package.repo}-') and not line[4:].startswith(f'"{package.repo}-'):
+                            missing_prefix = True
+                    if missing_prefix:
+                        formatted = False
+                        reason = f'Package name needs to have "{package.repo}-" as prefix'
+
+                if line.endswith('=('):
+                    hold_key = True
 
                 if line.startswith('    ') or line == ')':
                     next_line = True

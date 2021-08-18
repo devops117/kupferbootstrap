@@ -33,3 +33,11 @@ FLAVOURS = {
     'phosh': [],
     'plasma-mobile': [],
 }
+
+REPOSITORIES = [
+    'boot',
+    'device',
+    'firmware',
+    'linux',
+    'main',
+]
