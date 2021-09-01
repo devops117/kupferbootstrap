@@ -1,6 +1,8 @@
 import appdirs
 import os
 import toml
+import logging
+from copy import deepcopy
 
 CONFIG_DEFAULT_PATH = os.path.join(appdirs.user_config_dir('kupfer'), 'kupferbootstrap.toml')
 
@@ -24,21 +26,65 @@ CONFIG_DEFAULTS = {
         'jumpdrive_cache': os.path.join(appdirs.user_cache_dir('kupfer'), 'jumpdrive')
     },
     'profiles': {
-        'default': PROFILE_DEFAULTS.copy()
+        'default': deepcopy(PROFILE_DEFAULTS)
     }
 }
 
 
-def load_config(config_file=None):
-    _conf_file = config_file if config_file != None else DEFAULT_CONFIG_PATH
-    loaded_conf = toml.load(_conf_file)
-    # TODO: validate keys in loaded_conf, selectively merge known ones with CONFIG_DEFAULTS.
-    # Recurse into dict vales for one level except for profiles.* (do check for profiles.default tho!)
+class ConfigParserException(Exception):
     pass
+
+
+def load_config(config_file=None):
+    _conf_file = config_file if config_file != None else CONFIG_DEFAULT_PATH
+    loaded_conf = toml.load(_conf_file)
+
+    # Selectively merge known keys in loaded_conf with CONFIG_DEFAULTS
+    parsed = deepcopy(CONFIG_DEFAULTS)
+    for outer_name, outer_conf in loaded_conf.items():
+        # only handle known config sections
+        if outer_name not in CONFIG_DEFAULTS.keys():
+            logging.warning('Removed unknown config section', outer_name)
+            continue
+        logging.debug(f'Working on outer section "{outer_name}"')
+        # check if outer_conf is a dict
+        if not isinstance(outer_conf, dict):
+            parsed[outer_name] = outer_conf
+        else:
+            # recurse into inner dict
+            #parsed[outer_name] = {}
+
+            # profiles need special handling:
+            # 1. profile names are unknown keys by definition, but we want 'default' to exist
+            # 2. A profile's subkeys must be compared against PROFILE_DEFAULTS.keys()
+            if outer_name == 'profiles':
+                if 'default' not in outer_conf.keys():
+                    logging.warning('Default profile is not in profiles')
+
+                for profile_name, profile_conf in outer_conf.items():
+                    parsed[outer_name][profile_name] = {}
+                    for key, val in profile_conf.items():
+                        if key not in PROFILE_DEFAULTS:
+                            logging.warning(f'Skipped unknown config item "{key}" in profile "{profile_name}"')
+                            continue
+                        parsed[outer_name][profile_name][key] = val
+
+            else:
+                for inner_name, inner_conf in outer_conf.items():
+                    if inner_name not in CONFIG_DEFAULTS[outer_name].keys():
+                        logging.warning(f'Skipped unknown config item "{key}" in "{inner_name}"')
+                        continue
+                    parsed[outer_name][inner_name] = inner_conf
+
+    return parsed
 
 
 # temporary demo
 if __name__ == '__main__':
-    conf = CONFIG_DEFAULTS.copy()
-    conf['profiles']['pinephone'] = {'hostname': 'slowphone', 'pkgs_include': ['zsh','tmux','mpv','firefox']}
+    try:
+        conf = load_config()
+    except FileNotFoundError as ex:
+        logging.warning(f'Error reading toml file "{ex.filename}": {ex.strerror}')
+        conf = deepcopy(CONFIG_DEFAULTS)
+    conf['profiles']['pinephone'] = {'hostname': 'slowphone', 'pkgs_include': ['zsh', 'tmux', 'mpv', 'firefox']}
     print(toml.dumps(conf))
