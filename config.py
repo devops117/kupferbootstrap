@@ -6,14 +6,7 @@ from copy import deepcopy
 
 CONFIG_DEFAULT_PATH = os.path.join(appdirs.user_config_dir('kupfer'), 'kupferbootstrap.toml')
 
-PROFILE_DEFAULTS = {
-    'device': '',
-    'flavour': '',
-    'pkgs_include': [],
-    'pkgs_exclude': [],
-    'hostname': 'kupfer',
-    'username': 'kupfer'
-}
+PROFILE_DEFAULTS = {'device': '', 'flavour': '', 'pkgs_include': [], 'pkgs_exclude': [], 'hostname': 'kupfer', 'username': 'kupfer'}
 
 CONFIG_DEFAULTS = {
     'build': {
