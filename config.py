@@ -28,12 +28,16 @@ class ConfigParserException(Exception):
     pass
 
 
-def load_config(config_file=None):
+def load_config(config_file=None, merge_defaults=True):
     _conf_file = config_file if config_file != None else CONFIG_DEFAULT_PATH
     loaded_conf = toml.load(_conf_file)
 
-    # Selectively merge known keys in loaded_conf with CONFIG_DEFAULTS
-    parsed = deepcopy(CONFIG_DEFAULTS)
+    if merge_defaults:
+        # Selectively merge known keys in loaded_conf with CONFIG_DEFAULTS
+        parsed = deepcopy(CONFIG_DEFAULTS)
+    else:
+        parsed = {}
+
     for outer_name, outer_conf in loaded_conf.items():
         # only handle known config sections
         if outer_name not in CONFIG_DEFAULTS.keys():
@@ -44,8 +48,9 @@ def load_config(config_file=None):
         if not isinstance(outer_conf, dict):
             parsed[outer_name] = outer_conf
         else:
-            # recurse into inner dict
-            #parsed[outer_name] = {}
+            if not merge_defaults:
+                # init section
+                parsed[outer_name] = {}
 
             # profiles need special handling:
             # 1. profile names are unknown keys by definition, but we want 'default' to exist
@@ -55,7 +60,10 @@ def load_config(config_file=None):
                     logging.warning('Default profile is not in profiles')
 
                 for profile_name, profile_conf in outer_conf.items():
-                    parsed[outer_name][profile_name] = {}
+                    #  init profile; don't accidentally overwrite the default profile when merging
+                    if not (merge_defaults and profile_name == 'default'):
+                        parsed[outer_name][profile_name] = {}
+
                     for key, val in profile_conf.items():
                         if key not in PROFILE_DEFAULTS:
                             logging.warning(f'Skipped unknown config item "{key}" in profile "{profile_name}"')
@@ -63,6 +71,7 @@ def load_config(config_file=None):
                         parsed[outer_name][profile_name][key] = val
 
             else:
+                # handle generic inner config dict
                 for inner_name, inner_conf in outer_conf.items():
                     if inner_name not in CONFIG_DEFAULTS[outer_name].keys():
                         logging.warning(f'Skipped unknown config item "{key}" in "{inner_name}"')
