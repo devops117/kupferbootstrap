@@ -2,7 +2,7 @@ import atexit
 import os
 import subprocess
 import click
-from logger import logging, setup_logging, verbose_option
+from logger import logging
 from chroot import create_chroot, create_chroot_user
 from constants import DEVICES, FLAVOURS
 
@@ -109,11 +109,8 @@ def cmd_image():
 
 
 @click.command(name='device')
-@verbose_option
 @click.argument('device')
-def cmd_device(verbose, device):
-    setup_logging(verbose)
-
+def cmd_device(device):
     for key in DEVICES.keys():
         if '-'.join(key.split('-')[1:]) == device:
             device = key
@@ -130,11 +127,8 @@ def cmd_device(verbose, device):
 
 
 @click.command(name='flavour')
-@verbose_option
 @click.argument('flavour')
-def cmd_flavour(verbose, flavour):
-    setup_logging(verbose)
-
+def cmd_flavour(flavour):
     if flavour not in FLAVOURS:
         logging.fatal(f'Unknown flavour {flavour}. Pick one from:\n{", ".join(FLAVOURS.keys())}')
         exit(1)
@@ -146,10 +140,7 @@ def cmd_flavour(verbose, flavour):
 
 
 @click.command(name='build')
-@verbose_option
-def cmd_build(verbose):
-    setup_logging(verbose)
-
+def cmd_build():
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
 
@@ -209,10 +200,7 @@ This doesn't work, because the mount isn't passed through to the real host
 """
 """
 @click.command(name='inspect')
-@verbose_option
-def cmd_inspect(verbose):
-    setup_logging(verbose)
-
+def cmd_inspect():
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
 

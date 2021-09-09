@@ -1,5 +1,4 @@
 import shutil
-from logger import setup_logging, verbose_option
 import click
 import os
 
@@ -10,10 +9,7 @@ def cmd_cache():
 
 
 @click.command(name='clean')
-@verbose_option
-def cmd_clean(verbose):
-    setup_logging(verbose)
-
+def cmd_clean():
     for dir in ['/chroot', '/var/cache/pacman/pkg', '/var/cache/jumpdrive']:
         for file in os.listdir(dir):
             path = os.path.join(dir, file)

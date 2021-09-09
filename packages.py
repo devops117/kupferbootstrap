@@ -1,5 +1,4 @@
 from constants import REPOSITORIES
-from logger import setup_logging, verbose_option
 import atexit
 import click
 import logging
@@ -463,11 +462,8 @@ def cmd_packages():
 
 
 @click.command(name='build')
-@verbose_option
 @click.argument('paths', nargs=-1)
-def cmd_build(verbose, paths):
-    setup_logging(verbose)
-
+def cmd_build(paths):
     check_prebuilts()
 
     paths = list(paths)
@@ -492,9 +488,7 @@ def cmd_build(verbose, paths):
 
 
 @click.command(name='clean')
-@verbose_option
-def cmd_clean(verbose):
-    setup_logging(verbose)
+def cmd_clean():
     result = subprocess.run([
         'git',
         'clean',
@@ -506,11 +500,8 @@ def cmd_clean(verbose):
 
 
 @click.command(name='check')
-@verbose_option
 @click.argument('paths', nargs=-1)
-def cmd_check(verbose, paths):
-    setup_logging(verbose)
-
+def cmd_check(paths):
     paths = list(paths)
     packages = discover_packages(paths)
 

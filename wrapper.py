@@ -6,8 +6,8 @@ import appdirs
 import uuid
 
 if os.getenv('KUPFERBOOTSTRAP_DOCKER') == '1':
-    from main import cli
-    cli(prog_name='kupferbootstrap')
+    from main import main
+    main()
 else:
     script_path = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(script_path, 'version.txt')) as version_file:

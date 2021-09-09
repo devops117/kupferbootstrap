@@ -3,6 +3,7 @@ import os
 import toml
 import logging
 from copy import deepcopy
+import click
 
 CONFIG_DEFAULT_PATH = os.path.join(appdirs.user_config_dir('kupfer'), 'kupferbootstrap.toml')
 
@@ -23,33 +24,28 @@ CONFIG_DEFAULTS = {
     }
 }
 
-
-class ConfigParserException(Exception):
-    pass
-
-
-def load_config(config_file=None, merge_defaults=True):
+def parse_file(config_file: str, base: dict=CONFIG_DEFAULTS) -> dict:
+    """
+    Parse the toml contents of `config_file`, validating keys against `CONFIG_DEFAULTS`.
+    The parsed results are semantically merged into `base` before returning.
+    `base` itself is NOT checked for invalid keys.
+    """
     _conf_file = config_file if config_file != None else CONFIG_DEFAULT_PATH
     loaded_conf = toml.load(_conf_file)
-
-    if merge_defaults:
-        # Selectively merge known keys in loaded_conf with CONFIG_DEFAULTS
-        parsed = deepcopy(CONFIG_DEFAULTS)
-    else:
-        parsed = {}
+    parsed = deepcopy(base)
 
     for outer_name, outer_conf in loaded_conf.items():
         # only handle known config sections
         if outer_name not in CONFIG_DEFAULTS.keys():
-            logging.warning('Removed unknown config section', outer_name)
+            logging.warning(f'Skipped unknown config section "{outer_name}"')
             continue
         logging.debug(f'Working on outer section "{outer_name}"')
         # check if outer_conf is a dict
         if not isinstance(outer_conf, dict):
             parsed[outer_name] = outer_conf
         else:
-            if not merge_defaults:
-                # init section
+            # init section
+            if outer_name not in parsed:
                 parsed[outer_name] = {}
 
             # profiles need special handling:
@@ -57,11 +53,11 @@ def load_config(config_file=None, merge_defaults=True):
             # 2. A profile's subkeys must be compared against PROFILE_DEFAULTS.keys()
             if outer_name == 'profiles':
                 if 'default' not in outer_conf.keys():
-                    logging.warning('Default profile is not in profiles')
+                    logging.warning('Default profile is not defined in config file')
 
                 for profile_name, profile_conf in outer_conf.items():
-                    #  init profile; don't accidentally overwrite the default profile when merging
-                    if not (merge_defaults and profile_name == 'default'):
+                    #  init profile
+                    if profile_name not in parsed[outer_name]:
                         parsed[outer_name][profile_name] = {}
 
                     for key, val in profile_conf.items():
@@ -80,13 +76,79 @@ def load_config(config_file=None, merge_defaults=True):
 
     return parsed
 
+class ConfigLoadException(Exception):
+    inner = None
+    def __init__(self, extra_msg='', inner_exception: Exception = None):
+        msg = ['Config load failed!']
+        if extra_msg:
+            msg[0].append(':')
+            msg.append(extra_msg)
+        if inner_exception:
+            self.inner = inner_exception
+            msg.append(str(inner_exception))
+        super().__init__(self, ' '.join(msg))
+
+class ConfigStateHolder:
+    class ConfigLoadState:
+        load_finished = False
+        exception = None
+    file_state = ConfigLoadState()
+
+    # config options that are persisted to file
+    file: dict = {}
+    # runtime config not persisted anywhere
+    runtime: dict = {'verbose': False}
+
+    def __init__(self, runtime_conf = {}, file_conf_path: str = None, file_conf_base: dict = {}):
+        """init a stateholder, optionally loading `file_conf_path`"""
+        self.runtime.update(runtime_conf)
+        self.file.update(file_conf_base)
+        if file_conf_path:
+            self.try_load_file(file_conf_path)
+
+    def try_load_file(self, config_file=None, base=CONFIG_DEFAULTS):
+        _conf_file = config_file if config_file != None else CONFIG_DEFAULT_PATH
+        try:
+            self.file = parse_file(config_file=_conf_file, base=base)
+        except Exception as ex:
+            self.file_state.exception = ex
+        self.file_state.load_finished = True
+
+    def is_loaded(self):
+        return self.file_state.load_finished and self.file_state.exception == None
+
+    def enforce_config_loaded(self):
+        if not self.file_state.load_finished:
+            raise ConfigLoadException(Exception("Config file wasn't even parsed yet. This is probably a bug in kupferbootstrap :O"))
+        ex = self.file_state.exception
+        if ex:
+            msg = ''
+            if type(ex) == FileNotFoundError:
+                msg = "File doesn't exist. Try running `kupferbootstrap config init` first?"
+            raise ConfigLoadException(extra_msg=msg, inner_exception=ex)
+
+config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
+
+
+config_option = click.option(
+    '-C',
+    '--config',
+    'config_file',
+    help='Override path to config file',
+)
 
 # temporary demo
 if __name__ == '__main__':
+    print('vanilla:')
+    print(toml.dumps(config.file))
+    print('\n\n-----------------------------\n\n')
+
     try:
-        conf = load_config()
-    except FileNotFoundError as ex:
-        logging.warning(f'Error reading toml file "{ex.filename}": {ex.strerror}')
+        config.try_load_file()
+        config.enforce_config_loaded()
+        conf = config.file
+    except ConfigLoadException as ex:
+        logging.fatal(str(ex))
         conf = deepcopy(CONFIG_DEFAULTS)
     conf['profiles']['pinephone'] = {'hostname': 'slowphone', 'pkgs_include': ['zsh', 'tmux', 'mpv', 'firefox']}
     print(toml.dumps(conf))

@@ -1,14 +1,10 @@
 import subprocess
 import click
-from logger import setup_logging, verbose_option
 
 
 @click.command(name='ssh')
-@verbose_option
-def cmd_ssh(verbose):
-    setup_logging(verbose)
-
-    subprocess.run([
+def cmd_ssh(cmd: list[str] = [], host: str = '172.16.42.1', user: str = 'kupfer', port: int = 22):
+    return subprocess.run([
         'ssh',
         '-o',
         'GlobalKnownHostsFile=/dev/null',
@@ -16,5 +12,8 @@ def cmd_ssh(verbose):
         'UserKnownHostsFile=/dev/null',
         '-o',
         'StrictHostKeyChecking=no',
-        'kupfer@172.16.42.1',
-    ])
+        '-p',
+        str(port),
+        f'{user}@{host}',
+        '--',
+    ] + cmd)

@@ -7,16 +7,13 @@ import os
 import subprocess
 import click
 import tempfile
-from logger import logging, setup_logging, verbose_option
+from logger import logging
 
 
 @click.command(name='flash')
-@verbose_option
 @click.argument('what')
 @click.argument('location', required=False)
-def cmd_flash(verbose, what, location):
-    setup_logging(verbose)
-
+def cmd_flash(what, location):
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
 

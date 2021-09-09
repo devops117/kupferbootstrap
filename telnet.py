@@ -1,14 +1,10 @@
 import subprocess
 import click
-from logger import setup_logging, verbose_option
 
 
 @click.command(name='telnet')
-@verbose_option
-def cmd_telnet(verbose):
-    setup_logging(verbose)
-
+def cmd_telnet(hostname: str = '172.16.42.1'):
     subprocess.run([
         'telnet',
-        '172.16.42.1',
+        hostname,
     ])

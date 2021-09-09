@@ -1,18 +1,14 @@
 import os
 import urllib.request
 from image import get_device_and_flavour, get_image_name, dump_bootimg, dump_lk2nd
-from logger import setup_logging, verbose_option
 from fastboot import fastboot_boot, fastboot_erase_dtbo
 from constants import BOOT_STRATEGIES, FASTBOOT, JUMPDRIVE, LK2ND, JUMPDRIVE_VERSION
 import click
 
 
 @click.command(name='boot')
-@verbose_option
 @click.argument('type', required=False)
-def cmd_boot(verbose, type):
-    setup_logging(verbose)
-
+def cmd_boot(type):
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
     strategy = BOOT_STRATEGIES[device]
