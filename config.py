@@ -31,6 +31,7 @@ def parse_file(config_file: str, base: dict=CONFIG_DEFAULTS) -> dict:
     `base` itself is NOT checked for invalid keys.
     """
     _conf_file = config_file if config_file != None else CONFIG_DEFAULT_PATH
+    logging.debug(f'Trying to load config file: {_conf_file}')
     loaded_conf = toml.load(_conf_file)
     parsed = deepcopy(base)
 
@@ -97,7 +98,7 @@ class ConfigStateHolder:
     # config options that are persisted to file
     file: dict = {}
     # runtime config not persisted anywhere
-    runtime: dict = {'verbose': False}
+    runtime: dict = {'verbose': False, 'config_file': None}
 
     def __init__(self, runtime_conf = {}, file_conf_path: str = None, file_conf_base: dict = {}):
         """init a stateholder, optionally loading `file_conf_path`"""
@@ -108,6 +109,7 @@ class ConfigStateHolder:
 
     def try_load_file(self, config_file=None, base=CONFIG_DEFAULTS):
         _conf_file = config_file if config_file != None else CONFIG_DEFAULT_PATH
+        self.runtime['config_file'] = _conf_file
         try:
             self.file = parse_file(config_file=_conf_file, base=base)
         except Exception as ex:
