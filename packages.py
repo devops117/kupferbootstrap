@@ -6,12 +6,13 @@ import multiprocessing
 import os
 import shutil
 import subprocess
+from config import config
 from chroot import create_chroot
 from joblib import Parallel, delayed
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
-    'MAKEFLAGS': f'-j{multiprocessing.cpu_count()}',
+    'MAKEFLAGS': f"-j{multiprocessing.cpu_count() if config.file['build']['threads'] < 1 else config.file['build']['threads']}",
 }
 
 makepkg_cross_env = makepkg_env | {'PACMAN': '/app/local/bin/pacman_aarch64'}
