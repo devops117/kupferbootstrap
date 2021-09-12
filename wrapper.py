@@ -4,28 +4,28 @@ import subprocess
 import sys
 import appdirs
 import uuid
+import click
+import logging
+from config import config
 
-if os.getenv('KUPFERBOOTSTRAP_DOCKER') == '1':
-    from main import main
-    main()
-else:
+
+def wrap_docker():
     script_path = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(script_path, 'version.txt')) as version_file:
         version = version_file.read().replace('\n', '')
         tag = f'registry.gitlab.com/kupfer/kupferbootstrap:{version}'
         if version == 'dev':
-            result = subprocess.run(
-                [
-                    'docker',
-                    'build',
-                    '.',
-                    '-t',
-                    tag,
-                ],
-                cwd=script_path,
-            )
+            logging.info(f'Building docker image "{tag}"')
+            cmd = [
+                'docker',
+                'build',
+                '.',
+                '-t',
+                tag,
+            ] + (['-q'] if not config.runtime['verbose'] else [])
+            result = subprocess.run(cmd, cwd=script_path, capture_output=True)
             if result.returncode != 0:
-                print(f'Failed to build kupferbootstrap docker image')
+                logging.fatal('Failed to build docker image:\n' + result.stderr.decode())
                 exit(1)
         else:
             # Check if the image for the version already exists
@@ -39,7 +39,7 @@ else:
                 capture_output=True,
             )
             if result.stdout == b'':
-                print(f'Pulling kupferbootstrap docker image version \'{version}\'')
+                logging.info(f'Pulling kupferbootstrap docker image version \'{version}\'')
                 subprocess.run([
                     'docker',
                     'pull',
@@ -66,8 +66,7 @@ else:
                 '-v',
                 f'{os.getenv("KUPFERBOOTSTRAP_PREBUILTS")}:/prebuilts:z',
             ]
-
-        result = subprocess.run([
+        cmd = [
             'docker',
             'run',
             '--name',
@@ -88,6 +87,22 @@ else:
             '-v',
             '/dev:/dev',
             #'-v', '/mnt/kupfer:/mnt/kupfer:z',
-        ] + [tag, 'kupferbootstrap'] + sys.argv[1:])
+        ] + [tag, 'kupferbootstrap'] + sys.argv[1:]
+        logging.debug('Wrapping in docker:' + repr(cmd))
+        result = subprocess.run(cmd)
 
         exit(result.returncode)
+
+
+def enforce_wrap(no_wrapper=False):
+    if os.getenv('KUPFERBOOTSTRAP_DOCKER') != '1' and not no_wrapper:
+        wrap_docker()
+
+
+nowrapper_option = click.option(
+    '--no-wrapper',
+    'no_wrapper',
+    is_flag=True,
+    default=False,
+    help='Disable the docker wrapper. Defaults to autodetection.',
+)
