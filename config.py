@@ -7,7 +7,15 @@ import click
 
 CONFIG_DEFAULT_PATH = os.path.join(appdirs.user_config_dir('kupfer'), 'kupferbootstrap.toml')
 
-PROFILE_DEFAULTS = {'device': '', 'flavour': '', 'pkgs_include': [], 'pkgs_exclude': [], 'hostname': 'kupfer', 'username': 'kupfer', 'password': None}
+PROFILE_DEFAULTS = {
+    'device': '',
+    'flavour': '',
+    'pkgs_include': [],
+    'pkgs_exclude': [],
+    'hostname': 'kupfer',
+    'username': 'kupfer',
+    'password': None,
+}
 
 CONFIG_DEFAULTS = {
     'build': {
@@ -24,18 +32,22 @@ CONFIG_DEFAULTS = {
     }
 }
 
-def parse_file(config_file: str, base: dict=CONFIG_DEFAULTS) -> dict:
-    """
-    Parse the toml contents of `config_file`, validating keys against `CONFIG_DEFAULTS`.
-    The parsed results are semantically merged into `base` before returning.
-    `base` itself is NOT checked for invalid keys.
-    """
-    _conf_file = config_file if config_file != None else CONFIG_DEFAULT_PATH
-    logging.debug(f'Trying to load config file: {_conf_file}')
-    loaded_conf = toml.load(_conf_file)
-    parsed = deepcopy(base)
 
-    for outer_name, outer_conf in loaded_conf.items():
+def sanitize_config(conf: dict, warn_missing_defaultprofile=True) -> dict:
+    """checks the input config dict for unknown keys and returns only the known parts"""
+    return merge_configs(conf_new=conf, conf_base={}, warn_missing_defaultprofile=warn_missing_defaultprofile)
+
+
+def merge_configs(conf_new: dict, conf_base={}, warn_missing_defaultprofile=True) -> dict:
+    """
+    Returns `conf_new` semantically merged into `conf_base`, after validating
+    `conf_new` keys against `CONFIG_DEFAULTS` and `PROFILE_DEFAULTS`.
+    Pass `conf_base={}` to get a sanitized version of `conf_new`.
+    NOTE: `conf_base` is NOT checked for invalid keys. Sanitize beforehand.
+    """
+    parsed = deepcopy(conf_base)
+
+    for outer_name, outer_conf in deepcopy(conf_new).items():
         # only handle known config sections
         if outer_name not in CONFIG_DEFAULTS.keys():
             logging.warning(f'Skipped unknown config section "{outer_name}"')
@@ -53,10 +65,14 @@ def parse_file(config_file: str, base: dict=CONFIG_DEFAULTS) -> dict:
             # 1. profile names are unknown keys by definition, but we want 'default' to exist
             # 2. A profile's subkeys must be compared against PROFILE_DEFAULTS.keys()
             if outer_name == 'profiles':
-                if 'default' not in outer_conf.keys():
+                if warn_missing_defaultprofile and 'default' not in outer_conf.keys():
                     logging.warning('Default profile is not defined in config file')
 
                 for profile_name, profile_conf in outer_conf.items():
+                    if not isinstance(profile_conf, dict):
+                        logging.warning('Skipped key "{profile_name}" in profile section: only subsections allowed')
+                        continue
+
                     #  init profile
                     if profile_name not in parsed[outer_name]:
                         parsed[outer_name][profile_name] = {}
@@ -77,8 +93,22 @@ def parse_file(config_file: str, base: dict=CONFIG_DEFAULTS) -> dict:
 
     return parsed
 
+
+def parse_file(config_file: str, base: dict = CONFIG_DEFAULTS) -> dict:
+    """
+    Parse the toml contents of `config_file`, validating keys against `CONFIG_DEFAULTS`.
+    The parsed results are semantically merged into `base` before returning.
+    `base` itself is NOT checked for invalid keys.
+    """
+    _conf_file = config_file if config_file is not None else CONFIG_DEFAULT_PATH
+    logging.debug(f'Trying to load config file: {_conf_file}')
+    loaded_conf = toml.load(_conf_file)
+    return merge_configs(conf_new=loaded_conf, conf_base=base)
+
+
 class ConfigLoadException(Exception):
     inner = None
+
     def __init__(self, extra_msg='', inner_exception: Exception = None):
         msg = ['Config load failed!']
         if extra_msg:
@@ -89,10 +119,13 @@ class ConfigLoadException(Exception):
             msg.append(str(inner_exception))
         super().__init__(self, ' '.join(msg))
 
+
 class ConfigStateHolder:
+
     class ConfigLoadState:
         load_finished = False
         exception = None
+
     file_state = ConfigLoadState()
 
     # config options that are persisted to file
@@ -100,7 +133,7 @@ class ConfigStateHolder:
     # runtime config not persisted anywhere
     runtime: dict = {'verbose': False, 'config_file': None}
 
-    def __init__(self, runtime_conf = {}, file_conf_path: str = None, file_conf_base: dict = {}):
+    def __init__(self, runtime_conf={}, file_conf_path: str = None, file_conf_base: dict = {}):
         """init a stateholder, optionally loading `file_conf_path`"""
         self.runtime.update(runtime_conf)
         self.file.update(file_conf_base)
@@ -108,7 +141,7 @@ class ConfigStateHolder:
             self.try_load_file(file_conf_path)
 
     def try_load_file(self, config_file=None, base=CONFIG_DEFAULTS):
-        _conf_file = config_file if config_file != None else CONFIG_DEFAULT_PATH
+        _conf_file = config_file if config_file is not None else CONFIG_DEFAULT_PATH
         self.runtime['config_file'] = _conf_file
         try:
             self.file = parse_file(config_file=_conf_file, base=base)
@@ -129,8 +162,8 @@ class ConfigStateHolder:
                 msg = "File doesn't exist. Try running `kupferbootstrap config init` first?"
             raise ConfigLoadException(extra_msg=msg, inner_exception=ex)
 
-config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
 
+config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
 
 config_option = click.option(
     '-C',
