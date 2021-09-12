@@ -112,7 +112,7 @@ def check_prebuilts():
                         cwd=os.path.join('prebuilts', repo),
                     )
                     if result.returncode != 0:
-                        logging.fatal('Failed create prebuilt repos')
+                        logging.fatal('Failed to create prebuilt repos')
                         exit(1)
 
 
@@ -297,13 +297,13 @@ def check_package_version_built(package: Package) -> bool:
     return built
 
 
-def setup_dependencies_and_sources(package: Package):
+def setup_dependencies_and_sources(package: Package, enable_crosscompile: bool = True):
     logging.info(f'Setting up dependencies and sources for {package.path}')
     """
     To make cross-compilation work for almost every package, the host needs to have the dependencies installed
     so that the build tools can be used
     """
-    if package.mode == 'cross':
+    if package.mode == 'cross' and enable_crosscompile:
         for p in package.depends:
             # Don't check for errors here because there might be packages that are listed as dependencies but are not available on x86_64
             subprocess.run(
@@ -325,7 +325,7 @@ def setup_dependencies_and_sources(package: Package):
         exit(1)
 
 
-def build_package(package: Package):
+def build_package(package: Package, enable_crosscompile: bool = True):
     makepkg_compile_opts = [
         '--noextract',
         '--skipinteg',
@@ -333,7 +333,9 @@ def build_package(package: Package):
         '--nodeps',
     ]
 
-    if package.mode == 'cross':
+    setup_dependencies_and_sources(package, enable_crosscompile=enable_crosscompile)
+
+    if package.mode == 'cross' and enable_crosscompile:
         logging.info(f'Cross-compiling {package.path}')
 
         def umount():
@@ -480,11 +482,10 @@ def cmd_build(paths):
         logging.info('Everything built already')
         return
     logging.info('Building %s', ', '.join(map(lambda x: x.path, need_build)))
-
+    crosscompile = config.file['build']['crosscompile']
     for package in need_build:
         setup_chroot()
-        setup_dependencies_and_sources(package)
-        build_package(package)
+        build_package(package, enable_crosscompile=crosscompile)
         add_package_to_repo(package)
 
 
