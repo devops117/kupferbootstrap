@@ -2,6 +2,7 @@ import click
 import logging
 import sys
 
+
 def setup_logging(verbose: bool):
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
