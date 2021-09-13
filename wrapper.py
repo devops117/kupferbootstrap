@@ -2,14 +2,26 @@ import atexit
 import os
 import subprocess
 import sys
-import appdirs
 import uuid
 import click
 import logging
-from config import config
+from config import config, dump_file as dump_config_file
+
+DOCKER_PATHS = {
+    'chroots': '/chroot',
+    'jumpdrive': '/var/cache/jumpdrive',
+    'pacman': '/var/cache/pacman/pkg',
+}
 
 
 def wrap_docker():
+
+    def _docker_volumes(volume_mappings: dict[str, str]) -> list[str]:
+        result = []
+        for source, destination in volume_mappings.items():
+            result += ['-v', f'{source}:{destination}:z']
+        return result
+
     script_path = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(script_path, 'version.txt')) as version_file:
         version = version_file.read().replace('\n', '')
@@ -46,6 +58,7 @@ def wrap_docker():
                     tag,
                 ])
         container_name = f'kupferbootstrap-{str(uuid.uuid4())}'
+        wrapped_config = f'/tmp/kupfer/{container_name}_wrapped.toml'
 
         def at_exit():
             subprocess.run(
@@ -57,15 +70,19 @@ def wrap_docker():
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            os.remove(wrapped_config)
 
         atexit.register(at_exit)
 
-        prebuilts_mount = []
-        if os.getenv('KUPFERBOOTSTRAP_PREBUILTS') != '':
-            prebuilts_mount = [
-                '-v',
-                f'{os.getenv("KUPFERBOOTSTRAP_PREBUILTS")}:/prebuilts:z',
-            ]
+        dump_config_file(file_path=wrapped_config, config=(config.file | {'paths': DOCKER_PATHS}))
+        volumes = {
+            '/dev': '/dev',
+            os.getcwd(): '/src',
+            wrapped_config: '/root/.config/kupfer/kupferbootstrap.toml',
+        }
+        volumes |= dict({(config.file['paths'][vol_name], vol_dest) for vol_name, vol_dest in DOCKER_PATHS.items()})
+        if os.getenv('KUPFERBOOTSTRAP_PREBUILTS'):
+            volumes |= {os.getenv("KUPFERBOOTSTRAP_PREBUILTS"): '/prebuilts'}
         cmd = [
             'docker',
             'run',
@@ -75,19 +92,7 @@ def wrap_docker():
             '--interactive',
             '--tty',
             '--privileged',
-            '-v',
-            f'{os.getcwd()}:/src:z',
-        ] + prebuilts_mount + [
-            '-v',
-            f'{os.path.join(appdirs.user_cache_dir("kupfer"),"chroot")}:/chroot:z',
-            '-v',
-            f'{os.path.join(appdirs.user_cache_dir("kupfer"),"pacman")}:/var/cache/pacman/pkg:z',
-            '-v',
-            f'{os.path.join(appdirs.user_cache_dir("kupfer"),"jumpdrive")}:/var/cache/jumpdrive:z',
-            '-v',
-            '/dev:/dev',
-            #'-v', '/mnt/kupfer:/mnt/kupfer:z',
-        ] + [tag, 'kupferbootstrap'] + sys.argv[1:]
+        ] + _docker_volumes(volumes) + [tag, 'kupferbootstrap'] + sys.argv[1:]
         logging.debug('Wrapping in docker:' + repr(cmd))
         result = subprocess.run(cmd)
 
