@@ -116,15 +116,16 @@ def check_prebuilts():
                         exit(1)
 
 
-def setup_chroot(chroot_path='/chroot/root'):
-    logging.info('Initializing root chroot')
+def setup_build_chroot(arch='aarch64'):
+    chroot_name = f'build_{arch}'
+    logging.info('Initializing {arch} build chroot')
     extra_repos = {}
     for repo in REPOSITORIES:
         extra_repos[repo] = {
             'Server': f'file:///src/prebuilts/{repo}',
         }
-    create_chroot(
-        chroot_path,
+    chroot_path = create_chroot(
+        chroot_name,
         packages=['base-devel'],
         pacman_conf='/app/local/etc/pacman.conf',
         extra_repos=extra_repos,
@@ -135,7 +136,7 @@ def setup_chroot(chroot_path='/chroot/root'):
         '--root',
         chroot_path,
         '--arch',
-        'aarch64',
+        arch,
         '--config',
         chroot_path + '/etc/pacman.conf',
     ])
@@ -466,7 +467,7 @@ def cmd_packages():
 
 @click.command(name='build')
 @click.argument('paths', nargs=-1)
-def cmd_build(paths):
+def cmd_build(paths, arch='aarch64'):
     check_prebuilts()
 
     paths = list(paths)
@@ -484,7 +485,7 @@ def cmd_build(paths):
     logging.info('Building %s', ', '.join(map(lambda x: x.path, need_build)))
     crosscompile = config.file['build']['crosscompile']
     for package in need_build:
-        setup_chroot()
+        setup_build_chroot(arch=arch)
         build_package(package, enable_crosscompile=crosscompile)
         add_package_to_repo(package)
 

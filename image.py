@@ -3,7 +3,7 @@ import os
 import subprocess
 import click
 from logger import logging
-from chroot import create_chroot, create_chroot_user
+from chroot import create_chroot, create_chroot_user, get_chroot_path
 from constants import DEVICES, FLAVOURS
 
 
@@ -23,21 +23,20 @@ def get_device_and_flavour() -> tuple[str, str]:
     return (device, flavour)
 
 
-def get_image_name(device, flavour):
+def get_image_name(device, flavour) -> str:
     return f'{device}-{flavour}-rootfs.img'
 
 
-def mount_rootfs_image(path):
-    rootfs_mount = '/mnt/kupfer/rootfs'
-    if not os.path.exists(rootfs_mount):
-        os.makedirs(rootfs_mount)
+def mount_rootfs_image(image_path, mount_path):
+    if not os.path.exists(mount_path):
+        os.makedirs(mount_path)
 
     def umount():
         subprocess.run(
             [
                 'umount',
                 '-lc',
-                rootfs_mount,
+                mount_path,
             ],
             stderr=subprocess.DEVNULL,
         )
@@ -48,14 +47,12 @@ def mount_rootfs_image(path):
         'mount',
         '-o',
         'loop',
-        path,
-        rootfs_mount,
+        image_path,
+        mount_path,
     ])
     if result.returncode != 0:
-        logging.fatal(f'Failed to loop mount {path} to {rootfs_mount}')
+        logging.fatal(f'Failed to loop mount {image_path} to {mount_path}')
         exit(1)
-
-    return rootfs_mount
 
 
 def dump_bootimg(image_name: str) -> str:
@@ -164,8 +161,9 @@ def cmd_build():
         if result.returncode != 0:
             logging.fatal(f'Failed to create ext4 filesystem on {image_name}')
             exit(1)
-
-    rootfs_mount = mount_rootfs_image(image_name)
+    chroot_name = f'rootfs_{device}-{flavour}'
+    rootfs_mount = get_chroot_path(chroot_name)
+    mount_rootfs_image(image_name, rootfs_mount)
 
     extra_repos = {
         'main': {
@@ -187,12 +185,12 @@ def cmd_build():
         }
 
     create_chroot(
-        rootfs_mount,
+        chroot_name,
         packages=['base', 'base-kupfer'] + DEVICES[device] + FLAVOURS[flavour],
         pacman_conf='/app/local/etc/pacman.conf',
         extra_repos=extra_repos,
     )
-    create_chroot_user(rootfs_mount)
+    create_chroot_user(chroot_name)
 
 
 """
@@ -204,7 +202,8 @@ def cmd_inspect():
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
 
-    rootfs_mount = mount_rootfs_image(image_name)
+    rootfs_mount = get_chroot_path(f'rootfs_{device}-flavour')
+    mount_rootfs_image(image_name, rootfs_mount)
 
     logging.info(f'Inspect the rootfs image at {rootfs_mount}')
 
