@@ -94,6 +94,24 @@ def merge_configs(conf_new: dict, conf_base={}, warn_missing_defaultprofile=True
     return parsed
 
 
+def dump_toml(conf) -> str:
+    return toml.dumps(conf)
+
+
+def dump_file(file_path: str, config: dict, file_mode: int = 0o600):
+
+    def _opener(path, flags):
+        return os.open(path, flags, file_mode)
+
+    conf_dir = os.path.dirname(file_path)
+    if not os.path.exists(conf_dir):
+        os.makedirs(conf_dir)
+    old_umask = os.umask(0)
+    with open(file_path, 'w', opener=_opener) as f:
+        f.write(dump_toml(conf=config))
+    os.umask(old_umask)
+
+
 def parse_file(config_file: str, base: dict = CONFIG_DEFAULTS) -> dict:
     """
     Parse the toml contents of `config_file`, validating keys against `CONFIG_DEFAULTS`.
