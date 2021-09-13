@@ -24,8 +24,8 @@ CONFIG_DEFAULTS = {
     },
     'paths': {
         'chroots': os.path.join(appdirs.user_cache_dir('kupfer'), 'chroots'),
-        'pacman_cache': os.path.join(appdirs.user_cache_dir('kupfer'), 'pacman'),
-        'jumpdrive_cache': os.path.join(appdirs.user_cache_dir('kupfer'), 'jumpdrive')
+        'pacman': os.path.join(appdirs.user_cache_dir('kupfer'), 'pacman'),
+        'jumpdrive': os.path.join(appdirs.user_cache_dir('kupfer'), 'jumpdrive')
     },
     'profiles': {
         'default': deepcopy(PROFILE_DEFAULTS)
