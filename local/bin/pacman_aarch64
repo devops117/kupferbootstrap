@@ -1,4 +1,4 @@
 #!/bin/bash
-PACMAN_CHROOT="${PACMAN_CHROOT:-/chroot/copy}"
+PACMAN_CHROOT="${PACMAN_CHROOT:-/chroot/base_aarch64}"
 
 exec pacman --root "$PACMAN_CHROOT" --arch aarch64 --config "$PACMAN_CHROOT"/etc/pacman.conf "$@"

@@ -11,6 +11,8 @@ DOCKER_PATHS = {
     'chroots': '/chroot',
     'jumpdrive': '/var/cache/jumpdrive',
     'pacman': '/var/cache/pacman/pkg',
+    'packages': '/prebuilts',
+    'pkgbuilds': '/src',
 }
 
 
@@ -21,8 +23,9 @@ def wrap_docker():
         for source, destination in volume_mappings.items():
             result += ['-v', f'{source}:{destination}:z']
         return result
+        os.readl
 
-    script_path = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.dirname(os.path.realpath(__file__))
     with open(os.path.join(script_path, 'version.txt')) as version_file:
         version = version_file.read().replace('\n', '')
         tag = f'registry.gitlab.com/kupfer/kupferbootstrap:{version}'

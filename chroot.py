@@ -10,9 +10,36 @@ def get_chroot_path(chroot_name, override_basepath: str = None) -> str:
     return os.path.join(base_path, chroot_name)
 
 
-def create_chroot(chroot_name, packages=['base'], pacman_conf='/app/local/etc/pacman.conf', extra_repos={}, chroot_base_path: str = None):
+def create_chroot(
+    chroot_name,
+    arch='aarch64',
+    packages=['base'],
+    pacman_conf='/app/local/etc/pacman.conf',
+    extra_repos={},
+    chroot_base_path: str = None,
+):
+    base_chroot = f'base_{arch}'
     chroot_path = get_chroot_path(chroot_name, override_basepath=chroot_base_path)
     pacman_conf_target = chroot_path + '/etc/pacman.conf'
+
+    # copy base_chroot instead of creating from scratch every time
+    if not (chroot_base_path or chroot_name == base_chroot):
+        # only install base package in base_chroot
+        base_chroot_path = create_chroot(base_chroot, arch=arch)
+        logging.info(f'Copying {base_chroot} chroot to {chroot_name}')
+        result = subprocess.run([
+            'rsync',
+            '-a',
+            '--delete',
+            '-q',
+            '-W',
+            '-x',
+            f'{base_chroot_path}/',
+            f'{chroot_path}/',
+        ])
+        if result.returncode != 0:
+            logging.fatal('Failed to sync chroot copy')
+            exit(1)
 
     os.makedirs(chroot_path + '/etc', exist_ok=True)
     shutil.copyfile(pacman_conf, pacman_conf_target)
@@ -24,13 +51,21 @@ def create_chroot(chroot_name, packages=['base'], pacman_conf='/app/local/etc/pa
     with open(pacman_conf_target, 'a') as file:
         file.write(extra_conf)
 
-    result = subprocess.run(['pacstrap', '-C', pacman_conf_target, '-c', '-G', chroot_path] + packages + [
+    result = subprocess.run([
+        'pacstrap',
+        '-C',
+        pacman_conf_target,
+        '-c',
+        '-G',
+        chroot_path,
+    ] + packages + [
         '--needed',
         '--overwrite=*',
         '-yyuu',
-    ])
+    ],
+                            capture_output=True)
     if result.returncode != 0:
-        raise Exception('Failed to install chroot')
+        raise Exception('Failed to install chroot:' + result.stdout + '\n' + result.stderr)
     return chroot_path
 
 

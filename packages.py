@@ -37,20 +37,21 @@ pacman_cmd = [
 
 class Package:
     name = ''
-    names = []
-    depends = []
+    names: list[str] = []
+    depends: list[str] = []
     local_depends = None
     repo = ''
     mode = ''
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, dir: str = None) -> None:
         self.path = path
-        self._loadinfo()
+        dir = dir if dir else config['paths']['pkgbuilds']
+        self._loadinfo(dir)
 
-    def _loadinfo(self):
+    def _loadinfo(self, dir):
         result = subprocess.run(
             makepkg_cmd + ['--printsrcinfo'],
-            cwd=self.path,
+            cwd=os.path.join(dir, self.path),
             stdout=subprocess.PIPE,
         )
         lines = result.stdout.decode('utf-8').split('\n')
@@ -92,15 +93,17 @@ class Package:
         return f'package({self.name},{repr(self.names)})'
 
 
-def check_prebuilts():
-    if not os.path.exists('prebuilts'):
-        os.makedirs('prebuilts')
+local_packages: dict[Package] = None
+
+
+def check_prebuilts(dir: str = None):
+    prebuilts_dir = dir if dir else config.file['paths']['packages']
+    os.makedirs(prebuilts_dir, exist_ok=True)
     for repo in REPOSITORIES:
-        if not os.path.exists(os.path.join('prebuilts', repo)):
-            os.makedirs(os.path.join('prebuilts', repo))
+        os.makedirs(os.path.join(prebuilts_dir, repo), exist_ok=True)
         for ext1 in ['db', 'files']:
             for ext2 in ['', '.tar.xz']:
-                if not os.path.exists(os.path.join('prebuilts', repo, f'{repo}.{ext1}{ext2}')):
+                if not os.path.exists(os.path.join(prebuilts_dir, repo, f'{repo}.{ext1}{ext2}')):
                     result = subprocess.run(
                         [
                             'tar',
@@ -109,79 +112,23 @@ def check_prebuilts():
                             '-T',
                             '/dev/null',
                         ],
-                        cwd=os.path.join('prebuilts', repo),
+                        cwd=os.path.join(prebuilts_dir, repo),
                     )
                     if result.returncode != 0:
                         logging.fatal('Failed to create prebuilt repos')
                         exit(1)
 
 
-def setup_build_chroot(arch='aarch64'):
-    chroot_name = f'build_{arch}'
-    logging.info('Initializing {arch} build chroot')
-    extra_repos = {}
-    for repo in REPOSITORIES:
-        extra_repos[repo] = {
-            'Server': f'file:///src/prebuilts/{repo}',
-        }
-    chroot_path = create_chroot(
-        chroot_name,
-        packages=['base-devel'],
-        pacman_conf='/app/local/etc/pacman.conf',
-        extra_repos=extra_repos,
-    )
-
-    logging.info('Updating root chroot')
-    result = subprocess.run(pacman_cmd + [
-        '--root',
-        chroot_path,
-        '--arch',
-        arch,
-        '--config',
-        chroot_path + '/etc/pacman.conf',
-    ])
-    if result.returncode != 0:
-        logging.fatal('Failed to update root chroot')
-        exit(1)
-
-    with open('/chroot/root/usr/bin/makepkg', 'r') as file:
-        data = file.read()
-    data = data.replace('EUID == 0', 'EUID == -1')
-    with open('/chroot/root/usr/bin/makepkg', 'w') as file:
-        file.write(data)
-
-    with open('/chroot/root/etc/makepkg.conf', 'r') as file:
-        data = file.read()
-    data = data.replace('xz -c', 'xz -T0 -c')
-    data = data.replace(' check ', ' !check ')
-    with open('/chroot/root/etc/makepkg.conf', 'w') as file:
-        file.write(data)
-
-    logging.info('Syncing chroot copy')
-    result = subprocess.run([
-        'rsync',
-        '-a',
-        '--delete',
-        '-q',
-        '-W',
-        '-x',
-        '/chroot/root/',
-        '/chroot/copy',
-    ])
-    if result.returncode != 0:
-        logging.fatal('Failed to sync chroot copy')
-        exit(1)
-
-
-def discover_packages(package_paths: list[str]) -> dict[str, Package]:
+def discover_packages(package_paths: list[str] = ['all'], dir: str = None) -> dict[str, Package]:
+    dir = dir if dir else config.file['paths']['pkgbuilds']
     packages = {}
     paths = []
 
     for repo in REPOSITORIES:
-        for dir in os.listdir(repo):
-            paths.append(os.path.join(repo, dir))
+        for _dir in os.listdir(os.path.join(dir, repo)):
+            paths.append(os.path.join(repo, _dir))
 
-    results = Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(Package)(path) for path in paths)
+    results = Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(Package)(path, dir) for path in paths)
     for package in results:
         packages[package.name] = package
 
@@ -189,57 +136,121 @@ def discover_packages(package_paths: list[str]) -> dict[str, Package]:
     for package in packages.values():
         package.local_depends = package.depends.copy()
         for dep in package.depends.copy():
-            found = False
+            found = dep in packages
             for p in packages.values():
-                for name in p.names:
-                    if dep == name:
-                        found = True
-                        break
                 if found:
                     break
+                for name in p.names:
+                    if dep == name:
+                        logging.debug(f'Found {p.name} that provides {dep}')
+                        found = True
+                        break
             if not found:
                 logging.debug(f'Removing {dep} from dependencies')
                 package.local_depends.remove(dep)
+
+    return packages
+
+
+def filter_packages_by_paths(repo: list[Package], paths: list[str]) -> list[Package]:
+    if 'all' in paths:
+        return repo.values()
+    result = []
+    for pkg in repo:
+        if pkg.path in paths:
+            result += [pkg]
+    return result
+
+
+def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[Package]) -> list[set[Package]]:
     """
     This figures out all dependencies and their sub-dependencies for the selection and adds those packages to the selection.
     First the top-level packages get selected by searching the paths.
     Then their dependencies and sub-dependencies and so on get added to the selection.
     """
-    selection = []
-    deps = []
-    for package in packages.values():
-        if 'all' in package_paths or package.path in package_paths:
-            deps.append(package.name)
-    while len(deps) > 0:
-        for dep in deps.copy():
-            found = False
-            for p in selection:
-                for name in p.names:
-                    if name == dep:
-                        deps.remove(dep)
-                        found = True
-                        break
-            for p in packages.values():
-                if found:
+    visited = set[Package]()
+    visited_names = set[str]()
+    dep_levels: list[set[Package]] = [set(), set()]
+
+    def visited(package: Package, visited=visited, visited_names=visited_names):
+        visited.add(package)
+        visited_names.update(package.names)
+
+    def join_levels(levels: list[set[Package]]) -> dict[Package, int]:
+        result = dict[Package, int]()
+        for i, level in enumerate(levels):
+            result[level] = i
+
+    # init level 0
+    for package in to_build:
+        visited(package)
+        dep_levels[0].add(package)
+        # add dependencies of our requested builds to level 0
+        for dep_name in package.depends:
+            if dep_name in visited_names:
+                continue
+            elif dep_name in package_repo:
+                dep_pkg = package_repo[dep_name]
+                logging.debug(f"Adding {package.name}'s dependency {dep_name} to level 0")
+                dep_levels[0].add(dep_pkg)
+                visited(dep_pkg)
+    logging.debug('Generating dependency chain:')
+    """
+    Starting with `level` = 0, iterate over the packages in `dep_levels[level]`:
+    1. Moving packages that are dependencies of other packages up to `level`+1
+    2. Adding yet unadded local dependencies of all pkgs on `level` to `level`+1
+    3. increment level
+    4. repeat until
+    """
+    level = 0
+    # protect against dependency cycles
+    repeat_count = 0
+    _last_level: set[Package] = None
+    while dep_levels[level]:
+        logging.debug(f'Scanning dependency level {level}')
+        if level > 100:
+            raise Exception('Dependency chain reached 100 levels depth, this is probably a bug. Aborting!')
+
+        for pkg in dep_levels[level].copy():
+            pkg_done = False
+            if pkg not in dep_levels[level]:
+                # pkg has been moved, move on
+                continue
+            # move pkg to level+1 if something else depends on it
+            for other_pkg in dep_levels[level].copy():
+                if pkg == other_pkg:
+                    continue
+                if pkg_done:
                     break
-                for name in p.names:
-                    if name == dep:
-                        selection.append(packages[p.name])
-                        deps.remove(dep)
-                        # Add the sub-dependencies
-                        deps += p.local_depends
-                        found = True
+                if type(other_pkg) != Package:
+                    logging.fatal('Wtf, this is not a package:' + repr(other_pkg))
+                for dep_name in other_pkg.depends:
+                    if dep_name in pkg.names:
+                        dep_levels[level].remove(pkg)
+                        dep_levels[level + 1].add(pkg)
+                        logging.debug(f'Moving {pkg.name} to level {level+1} because {other_pkg.name} depends on it as {dep_name}')
+                        pkg_done = True
                         break
-            if not found:
-                logging.fatal(f'Failed to find dependency {dep}')
-                exit(1)
+            for dep_name in pkg.depends:
+                if dep_name in visited_names:
+                    continue
+                elif dep_name in package_repo:
+                    dep_pkg = package_repo[dep_name]
+                    logging.debug(f"Adding {pkg.name}'s dependency {dep_name} to level {level+1}")
+                    dep_levels[level + 1].add(dep_pkg)
+                    visited(dep_pkg)
 
-    selection = list(set(selection))
-    packages = {package.name: package for package in selection}
-
-    logging.debug(f'Figured out selection: {list(map(lambda p: p.path, selection))}')
-
-    return packages
+        if _last_level == dep_levels[level]:
+            repeat_count += 1
+        else:
+            repeat_count = 0
+        if repeat_count > 10:
+            raise Exception(f'Probable dependency cycle detected: Level has been passed on unmodifed multiple times: #{level}: {_last_level}')
+        _last_level = dep_levels[level]
+        level += 1
+        dep_levels.append(set[Package]())
+    # reverse level list into buildorder (deps first!), prune empty levels
+    return list([lvl for lvl in dep_levels[::-1] if lvl])
 
 
 def generate_package_order(packages: list[Package]) -> list[Package]:
@@ -298,12 +309,61 @@ def check_package_version_built(package: Package) -> bool:
     return built
 
 
-def setup_dependencies_and_sources(package: Package, enable_crosscompile: bool = True):
-    logging.info(f'Setting up dependencies and sources for {package.path}')
+def setup_build_chroot(arch='aarch64') -> str:
+    chroot_name = f'build_{arch}'
+    logging.info(f'Initializing {arch} build chroot')
+    extra_repos = {}
+    for repo in REPOSITORIES:
+        extra_repos[repo] = {
+            'Server': f"file://{config.file['paths']['packages']}/{repo}",
+        }
+    chroot_path = create_chroot(
+        chroot_name,
+        packages=['base-devel'],
+        pacman_conf='/app/local/etc/pacman.conf',
+        extra_repos=extra_repos,
+    )
+
+    logging.info(f'Updating chroot {chroot_name}')
+    result = subprocess.run(
+        pacman_cmd + [
+            '--root',
+            chroot_path,
+            '--arch',
+            arch,
+            '--config',
+            chroot_path + '/etc/pacman.conf',
+        ],
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        logging.fatal(f'Failed to update chroot {chroot_name}:')
+        logging.fatal(result.stdout)
+        logging.fatal(result.stderr)
+        exit(1)
+
+    with open(f'{chroot_path}/usr/bin/makepkg', 'r') as file:
+        data = file.read()
+    data = data.replace('EUID == 0', 'EUID == -1')
+    with open(f'{chroot_path}/usr/bin/makepkg', 'w') as file:
+        file.write(data)
+
+    with open(f'{chroot_path}/etc/makepkg.conf', 'r') as file:
+        data = file.read()
+    data = data.replace('xz -c', 'xz -T0 -c')
+    data = data.replace(' check ', ' !check ')
+    with open(f'{chroot_path}/etc/makepkg.conf', 'w') as file:
+        file.write(data)
+    return chroot_path
+
+
+def setup_dependencies_and_sources(package: Package, chroot: str, repo_dir: str = None, enable_crosscompile: bool = True):
+    logging.info(f'Setting up dependencies and sources for {package.path} in {chroot}')
     """
     To make cross-compilation work for almost every package, the host needs to have the dependencies installed
     so that the build tools can be used
     """
+    repo_dir = repo_dir if repo_dir else config.file['paths']['pkgbuilds']
     if package.mode == 'cross' and enable_crosscompile:
         for p in package.depends:
             # Don't check for errors here because there might be packages that are listed as dependencies but are not available on x86_64
@@ -313,28 +373,28 @@ def setup_dependencies_and_sources(package: Package, enable_crosscompile: bool =
             )
 
     result = subprocess.run(
-        makepkg_cmd + [
+        [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + [
             '--nobuild',
             '--holdver',
             '--syncdeps',
         ],
-        env=makepkg_cross_env,
-        cwd=package.path,
+        env=makepkg_cross_env | {'PACMAN_CHROOT': chroot},
+        cwd=os.path.join(repo_dir, package.path),
     )
     if result.returncode != 0:
-        logging.fatal(f'Failed to check sources for {package.path}')
-        exit(1)
+        raise Exception(f'Failed to check sources for {package.path}')
 
 
-def build_package(package: Package, enable_crosscompile: bool = True):
+def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable_crosscompile: bool = True):
     makepkg_compile_opts = [
         '--noextract',
         '--skipinteg',
         '--holdver',
         '--nodeps',
     ]
-
-    setup_dependencies_and_sources(package, enable_crosscompile=enable_crosscompile)
+    repo_dir = repo_dir if repo_dir else config.file['paths']['pkgbuilds']
+    chroot = setup_build_chroot(arch=arch)
+    setup_dependencies_and_sources(package, chroot, enable_crosscompile=enable_crosscompile)
 
     if package.mode == 'cross' and enable_crosscompile:
         logging.info(f'Cross-compiling {package.path}')
@@ -349,67 +409,44 @@ def build_package(package: Package, enable_crosscompile: bool = True):
                 stderr=subprocess.DEVNULL,
             )
 
+        base_chroot = os.path.join(config.file['paths']['chroots'], f'base_{arch}')
         result = subprocess.run([
             'mount',
             '-o',
             'bind',
-            '/chroot/copy/usr/share/i18n/locales',
+            f"{base_chroot}/usr/share/i18n/locales",
             '/usr/share/i18n/locales',
         ])
         if result.returncode != 0:
-            logging.fatal(f'Failed to bind mount glibc locales from chroot')
+            logging.fatal(f'Failed to bind mount glibc locales from chroot {base_chroot}')
             exit(1)
 
         result = subprocess.run(
-            makepkg_cmd + makepkg_compile_opts,
+            [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + makepkg_compile_opts,
             env=makepkg_cross_env | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
-            cwd=package.path,
+            cwd=os.path.join(dir, package.path),
         )
         if result.returncode != 0:
             logging.fatal(f'Failed to cross-compile package {package.path}')
             exit(1)
     else:
         logging.info(f'Host-compiling {package.path}')
-
-        def umount():
-            subprocess.run(
-                [
-                    'umount',
-                    '-lc',
-                    '/chroot/copy',
-                ],
-                stderr=subprocess.DEVNULL,
-            )
-
-        atexit.register(umount)
-
+        os.makedirs(f'{chroot}/src')
         result = subprocess.run([
             'mount',
             '-o',
             'bind',
-            '/chroot/copy',
-            '/chroot/copy',
+            config.file['paths']['pkgbuilds'],
+            f'{chroot}/src',
         ])
         if result.returncode != 0:
-            logging.fatal('Failed to bind mount chroot to itself')
-            exit(1)
-
-        os.makedirs('/chroot/copy/src')
-        result = subprocess.run([
-            'mount',
-            '-o',
-            'bind',
-            '.',
-            '/chroot/copy/src',
-        ])
-        if result.returncode != 0:
-            logging.fatal(f'Failed to bind mount folder to chroot')
+            logging.fatal(f'Failed to bind mount pkgdirs to {chroot}/src')
             exit(1)
 
         env = [f'{key}={value}' for key, value in makepkg_env.items()]
         result = subprocess.run([
             'arch-chroot',
-            '/chroot/copy',
+            chroot,
             '/usr/bin/env',
         ] + env + [
             '/bin/bash',
@@ -471,23 +508,35 @@ def cmd_build(paths, arch='aarch64'):
     check_prebuilts()
 
     paths = list(paths)
-    packages = discover_packages(paths)
+    repo = discover_packages()
 
-    package_order = generate_package_order(list(packages.values()))
-    need_build = []
-    for package in package_order:
-        if not check_package_version_built(package):
-            need_build.append(package)
+    package_levels = generate_dependency_chain(
+        repo,
+        filter_packages_by_paths(repo, paths),
+    )
+    build_names = set[str]()
+    build_levels = list[set[Package]]()
+    i = 0
+    for packages in package_levels:
+        level = set[Package]()
+        for package in packages:
+            if not check_package_version_built(package) or package.depends in build_names:
+                level.add(package)
+                build_names.update(package.names)
+        if level:
+            build_levels.append(level)
+            logging.debug(f'Adding to level {i}:' + '\n' + ('\n'.join([p.path for p in level])))
+            i += 1
 
-    if len(need_build) == 0:
+    if not build_levels:
         logging.info('Everything built already')
         return
-    logging.info('Building %s', ', '.join(map(lambda x: x.path, need_build)))
-    crosscompile = config.file['build']['crosscompile']
-    for package in need_build:
-        setup_build_chroot(arch=arch)
-        build_package(package, enable_crosscompile=crosscompile)
-        add_package_to_repo(package)
+    for level, need_build in enumerate(build_levels):
+        logging.info(f"(Level {level}) Building {', '.join([x.path for x in need_build])}")
+        crosscompile = config.file['build']['crosscompile']
+        for package in need_build:
+            build_package(package, arch=arch, enable_crosscompile=crosscompile)
+            add_package_to_repo(package)
 
 
 @click.command(name='clean')

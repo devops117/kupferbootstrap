@@ -25,11 +25,13 @@ CONFIG_DEFAULTS = {
     'paths': {
         'chroots': os.path.join(appdirs.user_cache_dir('kupfer'), 'chroots'),
         'pacman': os.path.join(appdirs.user_cache_dir('kupfer'), 'pacman'),
-        'jumpdrive': os.path.join(appdirs.user_cache_dir('kupfer'), 'jumpdrive')
+        'jumpdrive': os.path.join(appdirs.user_cache_dir('kupfer'), 'jumpdrive'),
+        'packages': os.path.join(appdirs.user_cache_dir('kupfer'), 'packages'),
+        'pkgbuilds': os.path.abspath(os.getcwd()),
     },
     'profiles': {
-        'default': deepcopy(PROFILE_DEFAULTS)
-    }
+        'default': deepcopy(PROFILE_DEFAULTS),
+    },
 }
 
 
@@ -146,6 +148,7 @@ class ConfigStateHolder:
 
     file_state = ConfigLoadState()
 
+    defaults = CONFIG_DEFAULTS
     # config options that are persisted to file
     file: dict = {}
     # runtime config not persisted anywhere
@@ -168,7 +171,7 @@ class ConfigStateHolder:
         self.file_state.load_finished = True
 
     def is_loaded(self):
-        return self.file_state.load_finished and self.file_state.exception == None
+        return self.file_state.load_finished and self.file_state.exception is None
 
     def enforce_config_loaded(self):
         if not self.file_state.load_finished:
