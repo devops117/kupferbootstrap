@@ -1,5 +1,4 @@
 from constants import REPOSITORIES
-import atexit
 import click
 import logging
 import multiprocessing
