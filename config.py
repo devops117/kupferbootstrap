@@ -152,11 +152,16 @@ class ConfigStateHolder:
     # config options that are persisted to file
     file: dict = {}
     # runtime config not persisted anywhere
-    runtime: dict = {'verbose': False, 'config_file': None}
+    runtime: dict = {
+        'verbose': False,
+        'config_file': None,
+        'arch': None,
+    }
 
     def __init__(self, runtime_conf={}, file_conf_path: str = None, file_conf_base: dict = {}):
         """init a stateholder, optionally loading `file_conf_path`"""
         self.runtime.update(runtime_conf)
+        self.runtime['arch'] = os.uname().machine
         self.file.update(file_conf_base)
         if file_conf_path:
             self.try_load_file(file_conf_path)

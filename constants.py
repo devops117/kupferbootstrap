@@ -41,3 +41,14 @@ REPOSITORIES = [
     'linux',
     'main',
 ]
+
+ARCHES = [
+    'x86_64',
+    'aarch64',
+]
+
+BASE_DISTROS: {
+    'x86_64': {
+        '': '',
+    },
+}
