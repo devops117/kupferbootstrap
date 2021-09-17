@@ -44,7 +44,7 @@ class Package:
 
     def __init__(self, path: str, dir: str = None) -> None:
         self.path = path
-        dir = dir if dir else config['paths']['pkgbuilds']
+        dir = dir if dir else config.file['paths']['pkgbuilds']
         self._loadinfo(dir)
 
     def _loadinfo(self, dir):
@@ -171,7 +171,7 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
     visited_names = set[str]()
     dep_levels: list[set[Package]] = [set(), set()]
 
-    def visited(package: Package, visited=visited, visited_names=visited_names):
+    def visit(package: Package, visited=visited, visited_names=visited_names):
         visited.add(package)
         visited_names.update(package.names)
 
@@ -180,20 +180,32 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
         for i, level in enumerate(levels):
             result[level] = i
 
-    # init level 0
-    for package in to_build:
-        visited(package)
-        dep_levels[0].add(package)
-        # add dependencies of our requested builds to level 0
+    def get_dependencies(package: Package, package_repo: dict[str, Package] = package_repo) -> list[Package]:
         for dep_name in package.depends:
             if dep_name in visited_names:
                 continue
             elif dep_name in package_repo:
                 dep_pkg = package_repo[dep_name]
-                logging.debug(f"Adding {package.name}'s dependency {dep_name} to level 0")
-                dep_levels[0].add(dep_pkg)
-                visited(dep_pkg)
+                visit(dep_pkg)
+                yield dep_pkg
+
+    def get_recursive_dependencies(package: Package, package_repo: dict[str, Package] = package_repo) -> list[Package]:
+        for pkg in get_dependencies(package, package_repo):
+            yield pkg
+            for sub_pkg in get_recursive_dependencies(pkg, package_repo):
+                yield sub_pkg
+
     logging.debug('Generating dependency chain:')
+    # init level 0
+    for package in to_build:
+        visit(package)
+        dep_levels[0].add(package)
+        logging.debug(f'Adding requested package {package.name}')
+        # add dependencies of our requested builds to level 0
+        for dep_pkg in get_recursive_dependencies(package):
+            logging.debug(f"Adding {package.name}'s dependency {dep_pkg.name} to level 0")
+            dep_levels[0].add(dep_pkg)
+            visit(dep_pkg)
     """
     Starting with `level` = 0, iterate over the packages in `dep_levels[level]`:
     1. Moving packages that are dependencies of other packages up to `level`+1
@@ -206,17 +218,19 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
     repeat_count = 0
     _last_level: set[Package] = None
     while dep_levels[level]:
+        level_copy = dep_levels[level].copy()
+        modified = False
         logging.debug(f'Scanning dependency level {level}')
         if level > 100:
             raise Exception('Dependency chain reached 100 levels depth, this is probably a bug. Aborting!')
 
-        for pkg in dep_levels[level].copy():
+        for pkg in level_copy:
             pkg_done = False
             if pkg not in dep_levels[level]:
                 # pkg has been moved, move on
                 continue
             # move pkg to level+1 if something else depends on it
-            for other_pkg in dep_levels[level].copy():
+            for other_pkg in level_copy:
                 if pkg == other_pkg:
                     continue
                 if pkg_done:
@@ -228,6 +242,7 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
                         dep_levels[level].remove(pkg)
                         dep_levels[level + 1].add(pkg)
                         logging.debug(f'Moving {pkg.name} to level {level+1} because {other_pkg.name} depends on it as {dep_name}')
+                        modified = True
                         pkg_done = True
                         break
             for dep_name in pkg.depends:
@@ -235,9 +250,10 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
                     continue
                 elif dep_name in package_repo:
                     dep_pkg = package_repo[dep_name]
-                    logging.debug(f"Adding {pkg.name}'s dependency {dep_name} to level {level+1}")
-                    dep_levels[level + 1].add(dep_pkg)
-                    visited(dep_pkg)
+                    logging.debug(f"Adding {pkg.name}'s dependency {dep_name} to level {level}")
+                    dep_levels[level].add(dep_pkg)
+                    visit(dep_pkg)
+                    modified = True
 
         if _last_level == dep_levels[level]:
             repeat_count += 1
@@ -245,41 +261,12 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
             repeat_count = 0
         if repeat_count > 10:
             raise Exception(f'Probable dependency cycle detected: Level has been passed on unmodifed multiple times: #{level}: {_last_level}')
-        _last_level = dep_levels[level]
-        level += 1
-        dep_levels.append(set[Package]())
+        _last_level = dep_levels[level].copy()
+        if not modified:  # if the level was modified, make another pass.
+            level += 1
+            dep_levels.append(set[Package]())
     # reverse level list into buildorder (deps first!), prune empty levels
     return list([lvl for lvl in dep_levels[::-1] if lvl])
-
-
-def generate_package_order(packages: list[Package]) -> list[Package]:
-    unsorted = packages.copy()
-    sorted = []
-    """
-    It goes through all unsorted packages and checks if the dependencies have already been sorted.
-    If that is true, the package itself is added to the sorted packages
-    """
-    while len(unsorted) > 0:
-        changed = False
-        for package in unsorted.copy():
-            if len(package.local_depends) == 0:
-                sorted.append(package)
-                unsorted.remove(package)
-                changed = True
-        for package in sorted:
-            for name in package.names:
-                for p in unsorted:
-                    for dep in p.local_depends.copy():
-                        if name == dep:
-                            p.local_depends.remove(name)
-                            changed = True
-        if not changed:
-            print('emergency break:', 'sorted:', repr(sorted), 'unsorted:', repr(unsorted))
-            sorted += unsorted
-            print('merged:', repr(sorted))
-            break
-
-    return sorted
 
 
 def check_package_version_built(package: Package) -> bool:
@@ -302,7 +289,7 @@ def check_package_version_built(package: Package) -> bool:
     for line in result.stdout.decode('utf-8').split('\n'):
         if line != "":
             file = os.path.basename(line)
-            if not os.path.exists(os.path.join('prebuilts', package.repo, file)):
+            if not os.path.exists(os.path.join(config.file['paths']['packages'], package.repo, file)):
                 built = False
 
     return built
@@ -375,7 +362,7 @@ def setup_dependencies_and_sources(package: Package, chroot: str, repo_dir: str 
         [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + [
             '--nobuild',
             '--holdver',
-            '--syncdeps',
+            '--nodeps',
         ],
         env=makepkg_cross_env | {'PACMAN_CHROOT': chroot},
         cwd=os.path.join(repo_dir, package.path),
@@ -389,7 +376,7 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
         '--noextract',
         '--skipinteg',
         '--holdver',
-        '--nodeps',
+        '--syncdeps',
     ]
     repo_dir = repo_dir if repo_dir else config.file['paths']['pkgbuilds']
     chroot = setup_build_chroot(arch=arch)
@@ -423,7 +410,7 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
         result = subprocess.run(
             [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + makepkg_compile_opts,
             env=makepkg_cross_env | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
-            cwd=os.path.join(dir, package.path),
+            cwd=os.path.join(repo_dir, package.path),
         )
         if result.returncode != 0:
             logging.fatal(f'Failed to cross-compile package {package.path}')
@@ -461,16 +448,16 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
 
 def add_package_to_repo(package: Package):
     logging.info(f'Adding {package.path} to repo')
-    dir = os.path.join('prebuilts', package.repo)
-    if not os.path.exists(dir):
-        os.mkdir(dir)
+    binary_dir = os.path.join(config.file['paths']['packages'], package.repo)
+    pkgbuild_dir = os.path.join(config.file['paths']['pkgbuilds'], package.path)
+    os.makedirs(binary_dir, exist_ok=True)
 
-    for file in os.listdir(package.path):
+    for file in os.listdir(pkgbuild_dir):
         # Forced extension by makepkg.conf
         if file.endswith('.pkg.tar.xz'):
             shutil.move(
-                os.path.join(package.path, file),
-                os.path.join(dir, file),
+                os.path.join(pkgbuild_dir, file),
+                os.path.join(binary_dir, file),
             )
             result = subprocess.run([
                 'repo-add',
@@ -478,22 +465,24 @@ def add_package_to_repo(package: Package):
                 '--new',
                 '--prevent-downgrade',
                 os.path.join(
-                    'prebuilts',
-                    package.repo,
+                    binary_dir,
                     f'{package.repo}.db.tar.xz',
                 ),
-                os.path.join(dir, file),
+                os.path.join(binary_dir, file),
             ])
             if result.returncode != 0:
                 logging.fatal(f'Failed add package {package.path} to repo')
                 exit(1)
     for repo in REPOSITORIES:
         for ext in ['db', 'files']:
-            if os.path.exists(os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz')):
-                os.unlink(os.path.join('prebuilts', repo, f'{repo}.{ext}'))
-                shutil.copyfile(os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz'), os.path.join('prebuilts', repo, f'{repo}.{ext}'))
-            if os.path.exists(os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz.old')):
-                os.unlink(os.path.join('prebuilts', repo, f'{repo}.{ext}.tar.xz.old'))
+            if os.path.exists(os.path.join(binary_dir, f'{repo}.{ext}.tar.xz')):
+                os.unlink(os.path.join(binary_dir, f'{repo}.{ext}'))
+                shutil.copyfile(
+                    os.path.join(binary_dir, f'{repo}.{ext}.tar.xz'),
+                    os.path.join(binary_dir, f'{repo}.{ext}'),
+                )
+            if os.path.exists(os.path.join(binary_dir, f'{repo}.{ext}.tar.xz.old')):
+                os.unlink(os.path.join(binary_dir, f'{repo}.{ext}.tar.xz.old'))
 
 
 @click.group(name='packages')
@@ -519,19 +508,19 @@ def cmd_build(paths, arch='aarch64'):
     for packages in package_levels:
         level = set[Package]()
         for package in packages:
-            if not check_package_version_built(package) or package.depends in build_names:
+            if (not check_package_version_built(package)) or set.intersection(set(package.depends), set(build_names)):
                 level.add(package)
                 build_names.update(package.names)
         if level:
             build_levels.append(level)
-            logging.debug(f'Adding to level {i}:' + '\n' + ('\n'.join([p.path for p in level])))
+            logging.debug(f'Adding to level {i}:' + '\n' + ('\n'.join([p.name for p in level])))
             i += 1
 
     if not build_levels:
         logging.info('Everything built already')
         return
     for level, need_build in enumerate(build_levels):
-        logging.info(f"(Level {level}) Building {', '.join([x.path for x in need_build])}")
+        logging.info(f"(Level {level}) Building {', '.join([x.name for x in need_build])}")
         crosscompile = config.file['build']['crosscompile']
         for package in need_build:
             build_package(package, arch=arch, enable_crosscompile=crosscompile)
@@ -691,6 +680,9 @@ def cmd_check(paths):
         logging.info(f'{package.path} nicely formatted!')
 
 
+cmd_packages.add_command(cmd_build)
+cmd_packages.add_command(cmd_clean)
+cmd_packages.add_command(cmd_check)
 cmd_packages.add_command(cmd_build)
 cmd_packages.add_command(cmd_clean)
 cmd_packages.add_command(cmd_check)
