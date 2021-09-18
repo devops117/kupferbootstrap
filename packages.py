@@ -1,10 +1,11 @@
-from constants import REPOSITORIES
 import click
+import atexit
 import logging
 import multiprocessing
 import os
 import shutil
 import subprocess
+from constants import REPOSITORIES
 from config import config
 from chroot import create_chroot
 from joblib import Parallel, delayed
@@ -151,11 +152,11 @@ def discover_packages(package_paths: list[str] = ['all'], dir: str = None) -> di
     return packages
 
 
-def filter_packages_by_paths(repo: list[Package], paths: list[str]) -> list[Package]:
+def filter_packages_by_paths(repo: dict[str, Package], paths: list[str]) -> list[Package]:
     if 'all' in paths:
         return repo.values()
     result = []
-    for pkg in repo:
+    for pkg in repo.values():
         if pkg.path in paths:
             result += [pkg]
     return result
@@ -211,7 +212,6 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
     1. Moving packages that are dependencies of other packages up to `level`+1
     2. Adding yet unadded local dependencies of all pkgs on `level` to `level`+1
     3. increment level
-    4. repeat until
     """
     level = 0
     # protect against dependency cycles
@@ -295,7 +295,7 @@ def check_package_version_built(package: Package) -> bool:
     return built
 
 
-def setup_build_chroot(arch='aarch64') -> str:
+def setup_build_chroot(arch='aarch64', extra_packages=[]) -> str:
     chroot_name = f'build_{arch}'
     logging.info(f'Initializing {arch} build chroot')
     extra_repos = {}
@@ -305,7 +305,7 @@ def setup_build_chroot(arch='aarch64') -> str:
         }
     chroot_path = create_chroot(
         chroot_name,
-        packages=['base-devel'],
+        packages=['base-devel', 'git'] + extra_packages,
         pacman_conf='/app/local/etc/pacman.conf',
         extra_repos=extra_repos,
     )
@@ -350,7 +350,15 @@ def setup_dependencies_and_sources(package: Package, chroot: str, repo_dir: str 
     so that the build tools can be used
     """
     repo_dir = repo_dir if repo_dir else config.file['paths']['pkgbuilds']
-    if package.mode == 'cross' and enable_crosscompile:
+    makepkg_setup_args = [
+        '--nobuild',
+        '--holdver',
+    ]
+    if not package.mode == 'cross' and enable_crosscompile:
+        makepkg_setup_args += ['--syncdeps']
+    else:
+        makepkg_setup_args += ['--nodeps']
+        logging.info('Setting up dependencies for cross-compilation')
         for p in package.depends:
             # Don't check for errors here because there might be packages that are listed as dependencies but are not available on x86_64
             subprocess.run(
@@ -359,11 +367,7 @@ def setup_dependencies_and_sources(package: Package, chroot: str, repo_dir: str 
             )
 
     result = subprocess.run(
-        [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + [
-            '--nobuild',
-            '--holdver',
-            '--nodeps',
-        ],
+        [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + makepkg_setup_args,
         env=makepkg_cross_env | {'PACMAN_CHROOT': chroot},
         cwd=os.path.join(repo_dir, package.path),
     )
@@ -376,10 +380,9 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
         '--noextract',
         '--skipinteg',
         '--holdver',
-        '--syncdeps',
     ]
     repo_dir = repo_dir if repo_dir else config.file['paths']['pkgbuilds']
-    chroot = setup_build_chroot(arch=arch)
+    chroot = setup_build_chroot(arch=arch, extra_packages=package.depends)
     setup_dependencies_and_sources(package, chroot, enable_crosscompile=enable_crosscompile)
 
     if package.mode == 'cross' and enable_crosscompile:
@@ -408,7 +411,7 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
             exit(1)
 
         result = subprocess.run(
-            [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + makepkg_compile_opts,
+            [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + ['--nodeps'] + makepkg_compile_opts,
             env=makepkg_cross_env | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
             cwd=os.path.join(repo_dir, package.path),
         )
@@ -417,7 +420,7 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
             exit(1)
     else:
         logging.info(f'Host-compiling {package.path}')
-        os.makedirs(f'{chroot}/src')
+        os.makedirs(f'{chroot}/src', exist_ok=True)
         result = subprocess.run([
             'mount',
             '-o',
@@ -425,6 +428,19 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
             config.file['paths']['pkgbuilds'],
             f'{chroot}/src',
         ])
+
+        def umount():
+            subprocess.run(
+                [
+                    'umount',
+                    '-lc',
+                    f'/{chroot}/src',
+                ],
+                stderr=subprocess.DEVNULL,
+            )
+
+        atexit.register(umount)
+
         if result.returncode != 0:
             logging.fatal(f'Failed to bind mount pkgdirs to {chroot}/src')
             exit(1)
@@ -437,13 +453,12 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
         ] + env + [
             '/bin/bash',
             '-c',
-            f'cd /src/{package.path} && makepkg --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}',
+            f'cd /src/{package.path} && makepkg --syncdeps --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}',
         ])
+        umount()
         if result.returncode != 0:
             logging.fatal(f'Failed to host-compile package {package.path}')
             exit(1)
-
-        umount()
 
 
 def add_package_to_repo(package: Package):
@@ -492,7 +507,7 @@ def cmd_packages():
 
 @click.command(name='build')
 @click.argument('paths', nargs=-1)
-def cmd_build(paths, arch='aarch64'):
+def cmd_build(paths: list[str], arch='aarch64'):
     check_prebuilts()
 
     paths = list(paths)
@@ -680,9 +695,6 @@ def cmd_check(paths):
         logging.info(f'{package.path} nicely formatted!')
 
 
-cmd_packages.add_command(cmd_build)
-cmd_packages.add_command(cmd_clean)
-cmd_packages.add_command(cmd_check)
 cmd_packages.add_command(cmd_build)
 cmd_packages.add_command(cmd_clean)
 cmd_packages.add_command(cmd_check)

@@ -7,6 +7,7 @@ import click
 
 CONFIG_DEFAULT_PATH = os.path.join(appdirs.user_config_dir('kupfer'), 'kupferbootstrap.toml')
 
+
 PROFILE_DEFAULTS = {
     'device': '',
     'flavour': '',
@@ -34,6 +35,11 @@ CONFIG_DEFAULTS = {
     },
 }
 
+CONFIG_RUNTIME_DEFAULTS = {
+    'verbose': False,
+    'config_file': None,
+    'arch': None,
+}
 
 def sanitize_config(conf: dict, warn_missing_defaultprofile=True) -> dict:
     """checks the input config dict for unknown keys and returns only the known parts"""
@@ -152,11 +158,7 @@ class ConfigStateHolder:
     # config options that are persisted to file
     file: dict = {}
     # runtime config not persisted anywhere
-    runtime: dict = {
-        'verbose': False,
-        'config_file': None,
-        'arch': None,
-    }
+    runtime: dict = CONFIG_RUNTIME_DEFAULTS
 
     def __init__(self, runtime_conf={}, file_conf_path: str = None, file_conf_base: dict = {}):
         """init a stateholder, optionally loading `file_conf_path`"""

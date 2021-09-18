@@ -28,4 +28,6 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
+RUN python -c "import constants; repos='\n'.join(['\n'.join([f'[{repo}]', f'Server = file:///prebuilts/\$repo', '']) for repo in constants.REPOSITORIES]); print(repos)" | tee /etc/pacman.d/kupfer-local
+
 WORKDIR /src

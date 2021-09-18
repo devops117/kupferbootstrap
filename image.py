@@ -4,7 +4,8 @@ import subprocess
 import click
 from logger import logging
 from chroot import create_chroot, create_chroot_user, get_chroot_path
-from constants import DEVICES, FLAVOURS
+from constants import DEVICES, FLAVOURS, REPOSITORIES
+from config import config
 
 
 def get_device_and_flavour() -> tuple[str, str]:
@@ -165,24 +166,12 @@ def cmd_build():
     rootfs_mount = get_chroot_path(chroot_name)
     mount_rootfs_image(image_name, rootfs_mount)
 
-    extra_repos = {
-        'main': {
-            'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo',
-        },
-        'device': {
-            'Server': 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo',
-        },
-    }
-
-    if os.path.exists('/prebuilts'):
-        extra_repos = {
-            'main': {
-                'Server': 'file:///prebuilts/$repo',
-            },
-            'device': {
-                'Server': 'file:///prebuilts/$repo',
-            },
-        }
+    packages_dir = config.file['paths']['packages']
+    if os.path.exists(packages_dir):
+        url = f'file://{packages_dir}/$repo',
+    else:
+        url = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
+    extra_repos = {repo: {'Server': url} for repo in REPOSITORIES}
 
     create_chroot(
         chroot_name,
