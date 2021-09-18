@@ -302,6 +302,7 @@ def setup_build_chroot(arch='aarch64', extra_packages=[]) -> str:
     for repo in REPOSITORIES:
         extra_repos[repo] = {
             'Server': f"file://{config.file['paths']['packages']}/{repo}",
+            'SigLevel': 'Never',
         }
     chroot_path = create_chroot(
         chroot_name,
@@ -353,11 +354,9 @@ def setup_dependencies_and_sources(package: Package, chroot: str, repo_dir: str 
     makepkg_setup_args = [
         '--nobuild',
         '--holdver',
+        '--nodeps'
     ]
-    if not package.mode == 'cross' and enable_crosscompile:
-        makepkg_setup_args += ['--syncdeps']
-    else:
-        makepkg_setup_args += ['--nodeps']
+    if (package.mode == 'cross' and enable_crosscompile):
         logging.info('Setting up dependencies for cross-compilation')
         for p in package.depends:
             # Don't check for errors here because there might be packages that are listed as dependencies but are not available on x86_64
