@@ -47,8 +47,21 @@ ARCHES = [
     'aarch64',
 ]
 
-BASE_DISTROS: {
+BASE_DISTROS = {
     'x86_64': {
-        '': '',
+        'repos': {
+            'core': 'http://ftp.halifax.rwth-aachen.de/archlinux/$repo/os/$arch',
+            'extra': 'http://ftp.halifax.rwth-aachen.de/archlinux/$repo/os/$arch',
+            'community': 'http://ftp.halifax.rwth-aachen.de/archlinux/$repo/os/$arch',
+        },
+    },
+    'aarch64': {
+        'repos': {
+            'core': 'http://mirror.archlinuxarm.org/$arch/$repo',
+            'extra': 'http://mirror.archlinuxarm.org/$arch/$repo',
+            'community': 'http://mirror.archlinuxarm.org/$arch/$repo',
+            'alarm': 'http://mirror.archlinuxarm.org/$arch/$repo',
+            'aur': 'http://mirror.archlinuxarm.org/$arch/$repo',
+        }
     },
 }

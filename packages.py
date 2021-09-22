@@ -354,7 +354,7 @@ def setup_dependencies_and_sources(package: Package, chroot: str, repo_dir: str 
     makepkg_setup_args = [
         '--nobuild',
         '--holdver',
-        '--nodeps'
+        '--nodeps',
     ]
     if (package.mode == 'cross' and enable_crosscompile):
         logging.info('Setting up dependencies for cross-compilation')

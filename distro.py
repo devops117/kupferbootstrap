@@ -32,7 +32,6 @@ class Repo:
     name: str
     url_template: str
     resolved_url: str
-    repo_name: str
     arch: str
     packages: dict[str, PackageInfo]
     options: dict[str, str]
@@ -43,11 +42,10 @@ class Repo:
         self.remote = not self.resolved_url.startswith('file://')
         # TODO
 
-    def __init__(self, name: str, url_template: str, arch: str, repo_name: str, options={}, scan=True):
+    def __init__(self, name: str, url_template: str, arch: str, options={}, scan=True):
         self.name = name
         self.url_template = url_template
         self.arch = arch
-        self.repo_name = repo_name
         self.options = deepcopy(options)
         if scan:
             self.scan()
@@ -86,3 +84,17 @@ class Distro:
             assert (repo.packages is not None)
             for package in repo.packages:
                 results[package.name] = package
+
+
+_base_distros: dict[str, Distro] = None
+
+
+def get_base_distros() -> dict[str, Distro]:
+    global _base_distros
+    if not _base_distros:
+        _distros: dict[str, Distro] = {}
+        for arch, distro_conf in BASE_DISTROS.items():
+            repos = {name: RepoInfo(url_template=url) for name, url in distro_conf['repos'].items()}
+            _distros[arch] = Distro(arch=arch, repo_infos=repos, scan=False)
+        _base_distros = _distros
+    return _base_distros

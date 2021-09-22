@@ -7,7 +7,6 @@ import click
 
 CONFIG_DEFAULT_PATH = os.path.join(appdirs.user_config_dir('kupfer'), 'kupferbootstrap.toml')
 
-
 PROFILE_DEFAULTS = {
     'device': '',
     'flavour': '',
@@ -40,6 +39,7 @@ CONFIG_RUNTIME_DEFAULTS = {
     'config_file': None,
     'arch': None,
 }
+
 
 def sanitize_config(conf: dict, warn_missing_defaultprofile=True) -> dict:
     """checks the input config dict for unknown keys and returns only the known parts"""
