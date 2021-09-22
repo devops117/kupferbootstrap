@@ -93,9 +93,6 @@ class Package:
         return f'package({self.name},{repr(self.names)})'
 
 
-local_packages: dict[Package] = None
-
-
 def check_prebuilts(dir: str = None):
     prebuilts_dir = dir if dir else config.file['paths']['packages']
     os.makedirs(prebuilts_dir, exist_ok=True)
@@ -657,17 +654,17 @@ def cmd_check(paths):
                     formatted = False
                     reason = 'Multiline variables should be indented with 4 spaces'
 
-                if '"' in line and not '$' in line and not ' ' in line:
+                if '"' in line and '$' not in line and ' ' not in line:
                     formatted = False
-                    reason = f'Found literal " although no "$" or " " was found in the line justifying the usage of a literal "'
+                    reason = 'Found literal " although no "$" or " " was found in the line justifying the usage of a literal "'
 
                 if '\'' in line:
                     formatted = False
                     reason = 'Found literal \' although either a literal " or no qoutes should be used'
 
-                if ('=(' in line and ' ' in line and not '"' in line and not line.endswith('=(')) or (hold_key and line.endswith(')')):
+                if ('=(' in line and ' ' in line and '"' not in line and not line.endswith('=(')) or (hold_key and line.endswith(')')):
                     formatted = False
-                    reason = f'Multiple elements in a list need to be in separate lines'
+                    reason = 'Multiple elements in a list need to be in separate lines'
 
                 if formatted and not next_key and not next_line:
                     if key_index == len(required):
