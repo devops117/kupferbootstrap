@@ -116,7 +116,7 @@ def check_prebuilts(dir: str = None):
                         exit(1)
 
 
-def discover_packages(package_paths: list[str] = ['all'], dir: str = None) -> dict[str, Package]:
+def discover_packages(dir: str = None) -> dict[str, Package]:
     dir = dir if dir else config.file['paths']['pkgbuilds']
     packages = {}
     paths = []
@@ -502,8 +502,9 @@ def cmd_packages():
 
 
 @click.command(name='build')
+@click.option('--force', is_flag=True, default=False)
 @click.argument('paths', nargs=-1)
-def cmd_build(paths: list[str], arch='aarch64'):
+def cmd_build(paths: list[str], force=False, arch='aarch64'):
     check_prebuilts()
 
     paths = list(paths)
@@ -519,7 +520,8 @@ def cmd_build(paths: list[str], arch='aarch64'):
     for packages in package_levels:
         level = set[Package]()
         for package in packages:
-            if (not check_package_version_built(package)) or set.intersection(set(package.depends), set(build_names)):
+            if ((not check_package_version_built(package)) or set.intersection(set(package.depends), set(build_names)) or
+                (force and package.path in paths)):
                 level.add(package)
                 build_names.update(package.names)
         if level:
@@ -546,7 +548,7 @@ def cmd_clean():
         '-dffX',
     ] + REPOSITORIES)
     if result.returncode != 0:
-        logging.fatal(f'Failed to git clean')
+        logging.fatal('Failed to git clean')
         exit(1)
 
 
@@ -554,10 +556,10 @@ def cmd_clean():
 @click.argument('paths', nargs=-1)
 def cmd_check(paths):
     paths = list(paths)
-    packages = discover_packages(paths)
+    packages = filter_packages_by_paths(discover_packages(), paths)
 
-    for name in packages:
-        package = packages[name]
+    for package in packages:
+        name = package.name
 
         is_git_package = False
         if name.endswith('-git'):
@@ -603,6 +605,10 @@ def cmd_check(paths):
             key = ""
             while True:
                 line = lines[line_index]
+
+                if line.startswith('#'):
+                    line_index += 1
+                    continue
 
                 if line.startswith('_') and not line.startswith(mode_key) and not line.startswith(commit_key):
                     line_index += 1

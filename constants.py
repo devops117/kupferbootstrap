@@ -62,6 +62,6 @@ BASE_DISTROS = {
             'community': 'http://mirror.archlinuxarm.org/$arch/$repo',
             'alarm': 'http://mirror.archlinuxarm.org/$arch/$repo',
             'aur': 'http://mirror.archlinuxarm.org/$arch/$repo',
-        }
+        },
     },
 }

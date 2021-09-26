@@ -78,14 +78,14 @@ def create_chroot_user(
 ):
     chroot_path = get_chroot_path(chroot_name, override_basepath=chroot_base_path)
 
-    install_script = '\n'.join([
-        f'if ! id -u "{user}" >/dev/null 2>&1; then',
-        f'  useradd -m {user}',
-        f'fi',
-        f'usermod -a -G {",".join(groups)} {user}',
-        f'echo "{user}:{password}" | chpasswd',
-        f'chown {user}:{user} /home/{user} -R',
-    ])
+    install_script = f'''
+        if ! id -u "{user}" >/dev/null 2>&1; then
+          useradd -m {user}
+        fi
+        usermod -a -G {",".join(groups)} {user}
+        echo "{user}:{password}" | chpasswd
+        chown {user}:{user} /home/{user} -R
+    '''
     result = subprocess.run([
         'arch-chroot',
         chroot_path,
