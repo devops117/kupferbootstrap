@@ -21,10 +21,10 @@ BOOT_STRATEGIES = {
 }
 
 DEVICES = {
-    'oneplus-enchilada': ['sdm845-oneplus-enchilada'],
-    'xiaomi-beryllium-ebbg': ['sdm845-xiaomi-beryllium-ebbg'],
-    'xiaomi-beryllium-tianma': ['sdm845-xiaomi-beryllium-tianma'],
-    'bq-paella': ['msm8916-bq-paella'],
+    'oneplus-enchilada': ['device-sdm845-oneplus-enchilada'],
+    'xiaomi-beryllium-ebbg': ['device-sdm845-xiaomi-beryllium-ebbg'],
+    'xiaomi-beryllium-tianma': ['device-sdm845-xiaomi-beryllium-tianma'],
+    'bq-paella': ['device-msm8916-bq-paella'],
 }
 
 FLAVOURS = {
