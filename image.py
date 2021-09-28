@@ -193,6 +193,15 @@ def cmd_build(verbose):
             'device': {
                 'Server': 'file:///prebuilts/$repo',
             },
+            'linux': {
+                'Server': 'file:///prebuilts/$repo',
+            },
+            'boot': {
+                'Server': 'file:///prebuilts/$repo',
+            },
+            'firmware': {
+                'Server': 'file:///prebuilts/$repo',
+            },
         }
 
     create_chroot(
