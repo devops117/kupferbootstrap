@@ -1,5 +1,5 @@
 import atexit
-from constants import BOOTIMG, LK2ND, LOCATIONS, QHYPSTUB, ROOTFS
+from constants import FLASH_PARTS, LOCATIONS
 from fastboot import fastboot_flash
 import shutil
 from image import dump_bootimg, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name
@@ -7,7 +7,11 @@ import os
 import subprocess
 import click
 import tempfile
-from logger import logging
+
+BOOTIMG = FLASH_PARTS['BOOTIMG']
+LK2ND = FLASH_PARTS['LK2ND']
+QHYPSTUB = FLASH_PARTS['QHYPSTUB']
+ROOTFS = FLASH_PARTS['ROOTFS']
 
 
 @click.command(name='flash')
@@ -17,13 +21,14 @@ def cmd_flash(what, location):
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
 
+    if what not in FLASH_PARTS.values():
+        raise Exception(f'Unknown what "{what}", must be one of {", ".join(FLASH_PARTS.values())}')
+
     if what == ROOTFS:
-        if location == None:
-            logging.info(f'You need to specify a location to flash {what} to')
-            exit(1)
+        if location is None:
+            raise Exception(f'You need to specify a location to flash {what} to')
         if location not in LOCATIONS:
-            logging.info(f'Invalid location {location}. Choose one of {", ".join(LOCATIONS)} for location')
-            exit(1)
+            raise Exception(f'Invalid location {location}. Choose one of {", ".join(LOCATIONS)}')
 
         path = ''
         dir = '/dev/disk/by-id'
@@ -33,16 +38,13 @@ def cmd_flash(what, location):
                 path = os.path.realpath(os.path.join(dir, file))
                 result = subprocess.run(['lsblk', path, '-o', 'SIZE'], capture_output=True)
                 if result.returncode != 0:
-                    logging.info(f'Failed to lsblk {path}')
-                    exit(1)
+                    raise Exception(f'Failed to lsblk {path}')
                 if result.stdout == b'SIZE\n  0B\n':
-                    logging.info(
+                    raise Exception(
                         f'Disk {path} has a size of 0B. That probably means it is not available (e.g. no microSD inserted or no microSD card slot installed in the device) or corrupt or defect'
                     )
-                    exit(1)
         if path == '':
-            logging.fatal(f'Unable to discover Jumpdrive')
-            exit(1)
+            raise Exception('Unable to discover Jumpdrive')
 
         image_dir = tempfile.gettempdir()
         image_path = os.path.join(image_dir, f'minimal-{image_name}')
@@ -60,8 +62,7 @@ def cmd_flash(what, location):
             image_path,
         ])
         if result.returncode != 0:
-            logging.fatal(f'Failed to e2fsck {image_path}')
-            exit(1)
+            raise Exception(f'Failed to e2fsck {image_path}')
 
         result = subprocess.run([
             'resize2fs',
@@ -69,8 +70,7 @@ def cmd_flash(what, location):
             image_path,
         ])
         if result.returncode != 0:
-            logging.fatal(f'Failed to resize2fs {image_path}')
-            exit(1)
+            raise Exception(f'Failed to resize2fs {image_path}')
 
         if location.endswith('-file'):
             part_mount = '/mnt/kupfer/fs'
@@ -95,8 +95,7 @@ def cmd_flash(what, location):
                 part_mount,
             ])
             if result.returncode != 0:
-                logging.fatal(f'Failed to mount {path} to {part_mount}')
-                exit(1)
+                raise Exception(f'Failed to mount {path} to {part_mount}')
 
             dir = os.path.join(part_mount, '.stowaways')
             if not os.path.exists(dir):
@@ -113,8 +112,7 @@ def cmd_flash(what, location):
                 os.path.join(dir, 'kupfer.img'),
             ])
             if result.returncode != 0:
-                logging.fatal(f'Failed to mount {path} to {part_mount}')
-                exit(1)
+                raise Exception(f'Failed to mount {path} to {part_mount}')
         else:
             result = subprocess.run([
                 'dd',
@@ -127,8 +125,7 @@ def cmd_flash(what, location):
                 'conv=sync,noerror',
             ])
             if result.returncode != 0:
-                logging.info(f'Failed to flash {image_path} to {path}')
-                exit(1)
+                raise Exception(f'Failed to flash {image_path} to {path}')
 
     elif what == BOOTIMG:
         path = dump_bootimg(image_name)
@@ -140,5 +137,4 @@ def cmd_flash(what, location):
         path = dump_qhypstub(image_name)
         fastboot_flash('qhypstub', path)
     else:
-        logging.fatal(f'Unknown what {what}')
-        exit(1)
+        raise Exception(f'Unknown what "{what}", this must be a bug in kupferbootstrap!')

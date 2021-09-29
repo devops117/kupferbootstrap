@@ -6,7 +6,7 @@ from flash import cmd_flash
 from ssh import cmd_ssh
 from forwarding import cmd_forwarding
 from telnet import cmd_telnet
-from logger import setup_logging, verbose_option
+from logger import logging, setup_logging, verbose_option, get_trace
 import click
 from config import config, config_option
 from wrapper import enforce_wrap, nowrapper_option
@@ -25,7 +25,12 @@ def cli(verbose: bool = False, config_file: str = None, no_wrapper: bool = False
 
 
 def main():
-    return cli(prog_name='kupferbootstrap')
+    try:
+        return cli(prog_name='kupferbootstrap')
+    except Exception as err:
+        logging.debug(get_trace())
+        logging.fatal(err)
+        exit(1)
 
 
 cli.add_command(cmd_cache)

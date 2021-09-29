@@ -3,25 +3,20 @@ import os
 import subprocess
 import click
 from logger import logging
-from chroot import create_chroot, create_chroot_user, get_chroot_path
+from chroot import create_chroot, create_chroot_user, get_chroot_path, run_chroot_cmd
 from constants import DEVICES, FLAVOURS, REPOSITORIES
 from config import config
 
 
-def get_device_and_flavour() -> tuple[str, str]:
-    if not os.path.exists('.device'):
-        logging.fatal(f'Please set the device using \'kupferbootstrap image device ...\'')
-        exit(1)
-    if not os.path.exists('.flavour'):
-        logging.fatal(f'Please set the flavour using \'kupferbootstrap image flavour ...\'')
-        exit(1)
+def get_device_and_flavour(profile=None) -> tuple[str, str]:
+    profile = config.get_profile(profile)
+    if not profile['device']:
+        raise Exception("Please set the device using 'kupferbootstrap config init ...'")
 
-    with open('.device', 'r') as file:
-        device = file.read()
-    with open('.flavour', 'r') as file:
-        flavour = file.read()
+    if not profile['flavour']:
+        raise Exception("Please set the flavour using 'kupferbootstrap config init ...'")
 
-    return (device, flavour)
+    return (profile['device'], profile['flavour'])
 
 
 def get_image_name(device, flavour) -> str:
@@ -96,7 +91,7 @@ def dump_qhypstub(image_name: str) -> str:
         f'dump /boot/qhypstub.bin {path}',
     ])
     if result.returncode != 0:
-        logging.fatal(f'Faild to dump qhypstub.bin')
+        logging.fatal('Faild to dump qhypstub.bin')
         exit(1)
     return path
 
@@ -106,40 +101,11 @@ def cmd_image():
     pass
 
 
-@click.command(name='device')
-@click.argument('device')
-def cmd_device(device):
-    for key in DEVICES.keys():
-        if '-'.join(key.split('-')[1:]) == device:
-            device = key
-            break
-
-    if device not in DEVICES:
-        logging.fatal(f'Unknown device {device}. Pick one from:\n{", ".join(DEVICES.keys())}')
-        exit(1)
-
-    logging.info(f'Setting device to {device}')
-
-    with open('.device', 'w') as file:
-        file.write(device)
-
-
-@click.command(name='flavour')
-@click.argument('flavour')
-def cmd_flavour(flavour):
-    if flavour not in FLAVOURS:
-        logging.fatal(f'Unknown flavour {flavour}. Pick one from:\n{", ".join(FLAVOURS.keys())}')
-        exit(1)
-
-    logging.info(f'Setting flavour to {flavour}')
-
-    with open('.flavour', 'w') as file:
-        file.write(flavour)
-
-
 @click.command(name='build')
 def cmd_build():
+    profile = config.get_profile()
     device, flavour = get_device_and_flavour()
+    post_cmds = FLAVOURS[flavour].get('post_cmds', [])
     image_name = get_image_name(device, flavour)
 
     if not os.path.exists(image_name):
@@ -172,14 +138,18 @@ def cmd_build():
     else:
         url = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
     extra_repos = {repo: {'Server': url} for repo in REPOSITORIES}
-
+    packages = ['base', 'base-kupfer'] + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
     create_chroot(
         chroot_name,
-        packages=['base', 'base-kupfer'] + DEVICES[device] + FLAVOURS[flavour],
+        packages=packages,
         pacman_conf='/app/local/etc/pacman.conf',
         extra_repos=extra_repos,
     )
-    create_chroot_user(chroot_name)
+    create_chroot_user(chroot_name, user=profile['username'], password=profile['password'])
+    if post_cmds:
+        result = run_chroot_cmd(' && '.join(post_cmds, chroot_name))
+        if result.returncode != 0:
+            raise Exception('Error running post_cmds')
 
 
 """
@@ -199,7 +169,5 @@ def cmd_inspect():
     signal.pause()
 """
 
-cmd_image.add_command(cmd_device)
-cmd_image.add_command(cmd_flavour)
 cmd_image.add_command(cmd_build)
 # cmd_image.add_command(cmd_inspect)

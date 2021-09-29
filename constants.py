@@ -1,10 +1,10 @@
 FASTBOOT = 'fastboot'
-
-ROOTFS = 'rootfs'
-BOOTIMG = 'bootimg'
-LK2ND = 'lk2nd'
-QHYPSTUB = 'qhypstub'
-
+FLASH_PARTS = {
+    'ROOTFS': 'rootfs',
+    'BOOTIMG': 'bootimg',
+    'LK2ND': 'lk2nd',
+    'QHYPSTUB': 'qhypstub',
+}
 EMMC = 'emmc'
 EMMCFILE = 'emmc-file'
 MICROSD = 'microsd'
@@ -28,9 +28,16 @@ DEVICES = {
 }
 
 FLAVOURS = {
-    'barebone': [],
-    'debug-shell': ['hook-debug-shell'],
-    'gnome': ['gnome'],
+    'barebone': {
+        'packages': []
+    },
+    'debug-shell': {
+        'packages': ['hook-debug-shell']
+    },
+    'gnome': {
+        'packages': ['gnome', 'archlinux-appstream-data', 'gnome-software-packagekit-plugin'],
+        'post_cmds': ['systemctl enable gdm']
+    },
 }
 
 REPOSITORIES = [

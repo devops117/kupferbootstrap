@@ -7,7 +7,10 @@ import click
 
 CONFIG_DEFAULT_PATH = os.path.join(appdirs.user_config_dir('kupfer'), 'kupferbootstrap.toml')
 
-PROFILE_DEFAULTS = {
+Profile = dict[str, str]
+
+PROFILE_DEFAULTS: Profile = {
+    'parent': '',
     'device': '',
     'flavour': '',
     'pkgs_include': [],
@@ -30,6 +33,7 @@ CONFIG_DEFAULTS = {
         'pkgbuilds': os.path.abspath(os.getcwd()),
     },
     'profiles': {
+        'current': 'default',
         'default': deepcopy(PROFILE_DEFAULTS),
     },
 }
@@ -39,6 +43,61 @@ CONFIG_RUNTIME_DEFAULTS = {
     'config_file': None,
     'arch': None,
 }
+
+
+def resolve_profile(
+    name: str,
+    sparse_profiles: dict[str, Profile],
+    resolved: dict[str, Profile] = None,
+    _visited=None,
+) -> dict[str, Profile]:
+    """
+    Recursively resolves the specified profile by `name` and its parents to merge the config semantically,
+    applying include and exclude overrides along the hierarchy.
+    If `resolved` is passed `None`, a fresh dictionary will be created.
+    `resolved` will be modified in-place during parsing and also returned.
+    A sanitized `sparse_profiles` dict is assumed, no checking for unknown keys or incorrect data types is performed.
+    `_visited` should not be passed by users.
+    """
+    if _visited is None:
+        _visited = list[str]()
+    if resolved is None:
+        resolved = dict[str, Profile]()
+    if name in _visited:
+        loop = list(_visited)
+        raise Exception(f'Dependency loop detected in profiles: {" -> ".join(loop+[loop[0]])}')
+    if name in resolved:
+        return resolved
+
+    _visited.append(name)
+    sparse = sparse_profiles[name]
+    full = deepcopy(sparse)
+    if 'parent' in sparse and (parent_name := sparse['parent']):
+        parent = resolve_profile(name=parent_name, sparse_profiles=sparse_profiles, resolved=resolved, _visited=_visited)[parent_name]
+        full = parent | sparse
+
+        # join our includes with parent's
+        includes = set(parent.get('pkgs_include', []) + sparse.get('pkgs_include', []))
+        if 'pkgs_exclude' in sparse:
+            includes -= set(sparse['pkgs_exclude'])
+        full['pkgs_include'] = list(includes)
+
+        # join our includes with parent's
+        excludes = set(parent.get('pkgs_exclude', []) + sparse.get('pkgs_exclude', []))
+        # our includes override parent excludes
+        if 'pkgs_include' in sparse:
+            excludes -= set(sparse['pkgs_include'])
+        full['pkgs_exclude'] = list(excludes)
+
+    # now init missing keys
+    for key, value in PROFILE_DEFAULTS.items():
+        if key not in full.keys():
+            full[key] = None
+            if type(value) == list:
+                full[key] = []
+
+    resolved[name] = full
+    return resolved
 
 
 def sanitize_config(conf: dict, warn_missing_defaultprofile=True) -> dict:
@@ -78,7 +137,10 @@ def merge_configs(conf_new: dict, conf_base={}, warn_missing_defaultprofile=True
 
                 for profile_name, profile_conf in outer_conf.items():
                     if not isinstance(profile_conf, dict):
-                        logging.warning('Skipped key "{profile_name}" in profile section: only subsections allowed')
+                        if profile_name == 'current':
+                            parsed[outer_name][profile_name] = profile_conf
+                        else:
+                            logging.warning('Skipped key "{profile_name}" in profile section: only subsections and "current" allowed')
                         continue
 
                     #  init profile
@@ -159,6 +221,7 @@ class ConfigStateHolder:
     file: dict = {}
     # runtime config not persisted anywhere
     runtime: dict = CONFIG_RUNTIME_DEFAULTS
+    _profile_cache: dict[str, Profile] = None
 
     def __init__(self, runtime_conf={}, file_conf_path: str = None, file_conf_base: dict = {}):
         """init a stateholder, optionally loading `file_conf_path`"""
@@ -171,6 +234,7 @@ class ConfigStateHolder:
     def try_load_file(self, config_file=None, base=CONFIG_DEFAULTS):
         _conf_file = config_file if config_file is not None else CONFIG_DEFAULT_PATH
         self.runtime['config_file'] = _conf_file
+        self._profile_cache = None
         try:
             self.file = parse_file(config_file=_conf_file, base=base)
         except Exception as ex:
@@ -189,6 +253,12 @@ class ConfigStateHolder:
             if type(ex) == FileNotFoundError:
                 msg = "File doesn't exist. Try running `kupferbootstrap config init` first?"
             raise ConfigLoadException(extra_msg=msg, inner_exception=ex)
+
+    def get_profile(self, name: str = None):
+        if not name:
+            name = self.file['profiles']['current']
+        self._profile_cache = resolve_profile(name, self.file['profiles'], resolved=self._profile_cache)
+        return self._profile_cache[name]
 
 
 config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
@@ -213,5 +283,16 @@ if __name__ == '__main__':
     except ConfigLoadException as ex:
         logging.fatal(str(ex))
         conf = deepcopy(CONFIG_DEFAULTS)
-    conf['profiles']['pinephone'] = {'hostname': 'slowphone', 'pkgs_include': ['zsh', 'tmux', 'mpv', 'firefox']}
+    conf['profiles']['pinephone'] = {
+        'hostname': 'slowphone',
+        'parent': '',
+        'pkgs_include': ['zsh', 'tmux', 'mpv', 'firefox'],
+        'pkgs_exclude': ['pixman-git'],
+    }
+    conf['profiles']['yeetphone'] = {
+        'parent': 'pinephone',
+        'hostname': 'yeetphone',
+        'pkgs_include': ['pixman-git'],
+        'pkgs_exclude': ['tmux'],
+    }
     print(toml.dumps(conf))

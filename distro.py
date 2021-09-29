@@ -38,7 +38,7 @@ class Repo:
     remote: bool
 
     def scan(self):
-        self.resolved_url = resolve_url(self.url_template, self.repo_name, self.arch)
+        self.resolved_url = resolve_url(self.url_template, repo_name=self.repo_name, arch=self.arch)
         self.remote = not self.resolved_url.startswith('file://')
         # TODO
 
@@ -49,6 +49,10 @@ class Repo:
         self.options = deepcopy(options)
         if scan:
             self.scan()
+
+    def config_snippet(self) -> str:
+        options = {'Server': self.url_template} | self.options.items()
+        return ('[%s]\n' % self.name) + '\n'.join([f"{key} = {value}" for key, value in options])
 
 
 class RepoInfo:
@@ -84,6 +88,9 @@ class Distro:
             assert (repo.packages is not None)
             for package in repo.packages:
                 results[package.name] = package
+
+    def config_snippet(self) -> str:
+        return '\n'.join(repo.config_snippet() for repo in self.repos)
 
 
 _base_distros: dict[str, Distro] = None
