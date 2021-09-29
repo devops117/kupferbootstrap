@@ -7,6 +7,7 @@ def resolve_url(url_template, repo_name: str, arch: str):
     result = url_template
     for template, replacement in {'$repo': repo_name, '$arch': config.runtime['arch']}.items():
         result = result.replace(template, replacement)
+    return result
 
 
 class PackageInfo:
@@ -60,8 +61,8 @@ class Repo(RepoInfo):
             self.scan()
 
     def config_snippet(self) -> str:
-        options = {'Server': self.url_template} | self.options.items()
-        return ('[%s]\n' % self.name) + '\n'.join([f"{key} = {value}" for key, value in options])
+        options = {'Server': self.url_template} | self.options
+        return ('[%s]\n' % self.name) + '\n'.join([f"{key} = {value}" for key, value in options.items()])
 
     def get_RepoInfo(self):
         return RepoInfo(url_template=self.url_template, options=self.options)
@@ -93,8 +94,8 @@ class Distro:
                 results[package.name] = package
 
     def _repos_config_snippet(self, extra_repos: dict[str, RepoInfo] = {}) -> str:
-        extras = [Repo(name, url_template=info.url_template, options=info.options, scan=False) for name, info in extra_repos.items()]
-        return '\n'.join(repo.config_snippet() for repo in (self.repos.values + extras))
+        extras = [Repo(name, url_template=info.url_template, arch=self.arch, options=info.options, scan=False) for name, info in extra_repos.items()]
+        return '\n'.join(repo.config_snippet() for repo in (list(self.repos.values()) + extras))
 
     def get_pacman_conf(self, extra_repos: dict[str, RepoInfo] = []):
         header = f'''
