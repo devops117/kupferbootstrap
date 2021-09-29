@@ -1,7 +1,6 @@
 import click
 import logging
 import sys
-from traceback import format_exc as get_trace
 
 
 def setup_logging(verbose: bool):

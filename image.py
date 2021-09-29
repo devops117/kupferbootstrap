@@ -6,6 +6,7 @@ from logger import logging
 from chroot import create_chroot, create_chroot_user, get_chroot_path, run_chroot_cmd
 from constants import DEVICES, FLAVOURS, REPOSITORIES
 from config import config
+from distro import get_kupfer_https, get_kupfer_local
 
 
 def get_device_and_flavour(profile=None) -> tuple[str, str]:
@@ -108,6 +109,9 @@ def cmd_build():
     post_cmds = FLAVOURS[flavour].get('post_cmds', [])
     image_name = get_image_name(device, flavour)
 
+    # TODO: PARSE DEVICE ARCH
+    arch = 'aarch64'
+
     if not os.path.exists(image_name):
         result = subprocess.run([
             'fallocate',
@@ -133,11 +137,10 @@ def cmd_build():
     mount_rootfs_image(image_name, rootfs_mount)
 
     packages_dir = config.file['paths']['packages']
-    if os.path.exists(packages_dir):
-        url = f'file://{packages_dir}/$repo'
+    if os.path.exists(os.path.join(packages_dir, 'main')):
+        extra_repos = get_kupfer_local(arch).repos
     else:
-        url = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
-    extra_repos = {repo: {'Server': url} for repo in REPOSITORIES}
+        extra_repos = get_kupfer_https(arch).repos
     packages = ['base', 'base-kupfer'] + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
     create_chroot(
         chroot_name,

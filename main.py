@@ -28,7 +28,7 @@ def cli(verbose: bool = False, config_file: str = None, no_wrapper: bool = False
 def main():
     try:
         return cli(prog_name='kupferbootstrap')
-    except Exception as err:
+    except Exception:
         logging.fatal(get_trace())
         exit(1)
 

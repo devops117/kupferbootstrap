@@ -3,6 +3,7 @@ import subprocess
 import os
 import shutil
 from config import config
+from distro import get_base_distros, RepoInfo
 
 
 def get_chroot_path(chroot_name, override_basepath: str = None) -> str:
@@ -15,11 +16,12 @@ def create_chroot(
     arch='aarch64',
     packages=['base'],
     pacman_conf='/app/local/etc/pacman.conf',
-    extra_repos={},
+    extra_repos: dict[str, RepoInfo] = {},
     chroot_base_path: str = None,
 ):
     base_chroot = f'base_{arch}'
     chroot_path = get_chroot_path(chroot_name, override_basepath=chroot_base_path)
+    base_distro = get_base_distros()[arch]
     pacman_conf_target = chroot_path + '/etc/pacman.conf'
 
     # copy base_chroot instead of creating from scratch every time
@@ -42,14 +44,10 @@ def create_chroot(
             exit(1)
 
     os.makedirs(chroot_path + '/etc', exist_ok=True)
-    shutil.copyfile(pacman_conf, pacman_conf_target)
 
-    extra_conf = ''
-    for repo_name, repo_options in extra_repos.items():
-        extra_conf += f'\n\n[{repo_name}]\n'
-        extra_conf += '\n'.join(['%s = %s' % (name, value) for name, value in repo_options.items()])
-    with open(pacman_conf_target, 'a') as file:
-        file.write(extra_conf)
+    conf_text = base_distro.get_pacman_conf(extra_repos)
+    with open(pacman_conf_target, 'w') as file:
+        file.write(conf_text)
 
     result = subprocess.run([
         'pacstrap',

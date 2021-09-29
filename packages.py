@@ -9,6 +9,7 @@ from constants import REPOSITORIES
 from config import config
 from chroot import create_chroot
 from joblib import Parallel, delayed
+from distro import RepoInfo, get_kupfer_local
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
@@ -295,17 +296,11 @@ def check_package_version_built(package: Package) -> bool:
 def setup_build_chroot(arch='aarch64', extra_packages=[]) -> str:
     chroot_name = f'build_{arch}'
     logging.info(f'Initializing {arch} build chroot')
-    extra_repos = {}
-    for repo in REPOSITORIES:
-        extra_repos[repo] = {
-            'Server': f"file://{config.file['paths']['packages']}/{repo}",
-            'SigLevel': 'Never',
-        }
     chroot_path = create_chroot(
         chroot_name,
         packages=['base-devel', 'git'] + extra_packages,
         pacman_conf='/app/local/etc/pacman.conf',
-        extra_repos=extra_repos,
+        extra_repos=get_kupfer_local(arch).repos,
     )
 
     logging.info(f'Updating chroot {chroot_name}')

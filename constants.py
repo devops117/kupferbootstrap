@@ -71,3 +71,5 @@ BASE_DISTROS = {
         },
     },
 }
+
+KUPFER_HTTPS = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
