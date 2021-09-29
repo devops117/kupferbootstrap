@@ -8,6 +8,7 @@ from constants import DEVICES, FLAVOURS
 from config import config
 from distro import get_kupfer_https, get_kupfer_local
 from wrapper import enforce_wrap
+from signal import pause
 
 
 def get_device_and_flavour(profile=None) -> tuple[str, str]:
@@ -157,19 +158,14 @@ def cmd_build():
             raise Exception('Error running post_cmds')
 
 
-"""
-This doesn't work, because the mount isn't passed through to the real host
-"""
-"""
 @cmd_image.command(name='inspect')
 def cmd_inspect():
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
 
-    rootfs_mount = get_chroot_path(f'rootfs_{device}-flavour')
+    rootfs_mount = get_chroot_path(f'rootfs_{device}-{flavour}')
     mount_rootfs_image(image_name, rootfs_mount)
 
     logging.info(f'Inspect the rootfs image at {rootfs_mount}')
 
-    signal.pause()
-"""
+    pause()
