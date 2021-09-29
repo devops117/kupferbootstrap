@@ -8,7 +8,7 @@ from forwarding import cmd_forwarding
 from telnet import cmd_telnet
 from logger import logging, setup_logging, verbose_option
 import click
-from config import config, config_option
+from config import config, config_option, cmd_config
 from wrapper import enforce_wrap, nowrapper_option
 from traceback import format_exc as get_trace
 
@@ -32,7 +32,7 @@ def main():
         logging.fatal(get_trace())
         exit(1)
 
-
+cli.add_command(cmd_config)
 cli.add_command(cmd_cache)
 cli.add_command(cmd_packages)
 cli.add_command(cmd_image)

@@ -260,6 +260,15 @@ class ConfigStateHolder:
         self._profile_cache = resolve_profile(name, self.file['profiles'], resolved=self._profile_cache)
         return self._profile_cache[name]
 
+    def dump(self) -> str:
+        dump_toml(self.file)
+
+    def write(self, path=None):
+        if path is None:
+            path = self.runtime['config_file']
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        dump_file(path, self.file)
+
 
 config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
 
@@ -269,6 +278,19 @@ config_option = click.option(
     'config_file',
     help='Override path to config file',
 )
+
+
+@click.group(name='config')
+def cmd_config():
+    pass
+
+
+@cmd_config.command(name='init')
+def cmd_init():
+    """Initialize the config file"""
+    # TODO
+    config.write()
+
 
 # temporary demo
 if __name__ == '__main__':
