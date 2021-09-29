@@ -103,7 +103,7 @@ def wrap_docker():
 
 
 def enforce_wrap(no_wrapper=False):
-    if os.getenv('KUPFERBOOTSTRAP_DOCKER') != '1' and not no_wrapper:
+    if os.getenv('KUPFERBOOTSTRAP_DOCKER') != '1' and not config.runtime['no_wrap'] and not no_wrapper:
         wrap_docker()
 
 

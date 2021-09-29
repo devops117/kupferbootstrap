@@ -42,6 +42,7 @@ CONFIG_RUNTIME_DEFAULTS = {
     'verbose': False,
     'config_file': None,
     'arch': None,
+    'no_wrap': False,
 }
 
 

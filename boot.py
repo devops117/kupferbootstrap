@@ -4,6 +4,7 @@ from image import get_device_and_flavour, get_image_name, dump_bootimg, dump_lk2
 from fastboot import fastboot_boot, fastboot_erase_dtbo
 from constants import BOOT_STRATEGIES, FLASH_PARTS, FASTBOOT, JUMPDRIVE, JUMPDRIVE_VERSION
 import click
+from wrapper import enforce_wrap
 
 LK2ND = FLASH_PARTS['LK2ND']
 BOOTIMG = FLASH_PARTS['BOOTIMG']
@@ -15,6 +16,7 @@ TYPES = [LK2ND, JUMPDRIVE, BOOTIMG]
 @click.argument('type', required=False, default=BOOTIMG)
 def cmd_boot(type):
     f"""Flash one of {', '.join(TYPES)}"""
+    enforce_wrap()
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
     strategy = BOOT_STRATEGIES[device]

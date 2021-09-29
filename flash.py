@@ -7,6 +7,7 @@ import os
 import subprocess
 import click
 import tempfile
+from wrapper import enforce_wrap
 
 BOOTIMG = FLASH_PARTS['BOOTIMG']
 LK2ND = FLASH_PARTS['LK2ND']
@@ -18,6 +19,7 @@ ROOTFS = FLASH_PARTS['ROOTFS']
 @click.argument('what')
 @click.argument('location', required=False)
 def cmd_flash(what, location):
+    enforce_wrap()
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
 

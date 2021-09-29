@@ -9,7 +9,8 @@ from constants import REPOSITORIES
 from config import config
 from chroot import create_chroot
 from joblib import Parallel, delayed
-from distro import RepoInfo, get_kupfer_local
+from distro import get_kupfer_local
+from wrapper import enforce_wrap
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
@@ -496,10 +497,11 @@ def cmd_packages():
     pass
 
 
-@click.command(name='build')
+@cmd_packages.command(name='build')
 @click.option('--force', is_flag=True, default=False)
 @click.argument('paths', nargs=-1)
 def cmd_build(paths: list[str], force=False, arch='aarch64'):
+    enforce_wrap()
     check_prebuilts()
 
     paths = list(paths)
@@ -535,8 +537,9 @@ def cmd_build(paths: list[str], force=False, arch='aarch64'):
             add_package_to_repo(package)
 
 
-@click.command(name='clean')
+@cmd_packages.command(name='clean')
 def cmd_clean():
+    enforce_wrap()
     result = subprocess.run([
         'git',
         'clean',
@@ -547,9 +550,10 @@ def cmd_clean():
         exit(1)
 
 
-@click.command(name='check')
+@cmd_packages.command(name='check')
 @click.argument('paths', nargs=-1)
 def cmd_check(paths):
+    enforce_wrap()
     paths = list(paths)
     packages = filter_packages_by_paths(discover_packages(), paths)
 
@@ -690,8 +694,3 @@ def cmd_check(paths):
                     line_index += 1
 
         logging.info(f'{package.path} nicely formatted!')
-
-
-cmd_packages.add_command(cmd_build)
-cmd_packages.add_command(cmd_clean)
-cmd_packages.add_command(cmd_check)

@@ -4,9 +4,10 @@ import subprocess
 import click
 from logger import logging
 from chroot import create_chroot, create_chroot_user, get_chroot_path, run_chroot_cmd
-from constants import DEVICES, FLAVOURS, REPOSITORIES
+from constants import DEVICES, FLAVOURS
 from config import config
 from distro import get_kupfer_https, get_kupfer_local
+from wrapper import enforce_wrap
 
 
 def get_device_and_flavour(profile=None) -> tuple[str, str]:
@@ -102,8 +103,9 @@ def cmd_image():
     pass
 
 
-@click.command(name='build')
+@cmd_image.command(name='build')
 def cmd_build():
+    enforce_wrap()
     profile = config.get_profile()
     device, flavour = get_device_and_flavour()
     post_cmds = FLAVOURS[flavour].get('post_cmds', [])
@@ -159,7 +161,7 @@ def cmd_build():
 This doesn't work, because the mount isn't passed through to the real host
 """
 """
-@click.command(name='inspect')
+@cmd_image.command(name='inspect')
 def cmd_inspect():
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
@@ -171,6 +173,3 @@ def cmd_inspect():
 
     signal.pause()
 """
-
-cmd_image.add_command(cmd_build)
-# cmd_image.add_command(cmd_inspect)

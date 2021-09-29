@@ -1,7 +1,6 @@
 import logging
 import subprocess
 import os
-import shutil
 from config import config
 from distro import get_base_distros, RepoInfo
 

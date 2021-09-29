@@ -9,7 +9,7 @@ from telnet import cmd_telnet
 from logger import logging, setup_logging, verbose_option
 import click
 from config import config, config_option, cmd_config
-from wrapper import enforce_wrap, nowrapper_option
+from wrapper import nowrapper_option
 from traceback import format_exc as get_trace
 
 
@@ -20,9 +20,8 @@ from traceback import format_exc as get_trace
 def cli(verbose: bool = False, config_file: str = None, no_wrapper: bool = False):
     setup_logging(verbose)
     config.runtime['verbose'] = verbose
+    config.runtime['no_wrap'] = no_wrapper
     config.try_load_file(config_file)
-    # TODO: move this only to CMDs where it's needed
-    enforce_wrap(no_wrapper=no_wrapper)
 
 
 def main():
@@ -31,6 +30,7 @@ def main():
     except Exception:
         logging.fatal(get_trace())
         exit(1)
+
 
 cli.add_command(cmd_config)
 cli.add_command(cmd_cache)
