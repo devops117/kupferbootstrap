@@ -1,11 +1,11 @@
 import subprocess
 import click
-from wrapper import enforce_wrap
+from wrapper import check_programs_wrap
 
 
 @click.command(name='telnet')
 def cmd_telnet(hostname: str = '172.16.42.1'):
-    enforce_wrap()
+    check_programs_wrap('telnet')
     subprocess.run([
         'telnet',
         hostname,

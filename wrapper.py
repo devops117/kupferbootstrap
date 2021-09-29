@@ -6,6 +6,7 @@ import uuid
 import click
 import logging
 from config import config, dump_file as dump_config_file
+from utils import programs_available
 
 DOCKER_PATHS = {
     'chroots': '/chroot',
@@ -105,6 +106,11 @@ def wrap_docker():
 def enforce_wrap(no_wrapper=False):
     if os.getenv('KUPFERBOOTSTRAP_DOCKER') != '1' and not config.runtime['no_wrap'] and not no_wrapper:
         wrap_docker()
+
+
+def check_programs_wrap(programs):
+    if not programs_available(programs):
+        enforce_wrap()
 
 
 nowrapper_option = click.option(

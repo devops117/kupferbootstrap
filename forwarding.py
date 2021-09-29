@@ -2,12 +2,13 @@ import click
 import subprocess
 from logger import logging
 from ssh import cmd_ssh
-from wrapper import enforce_wrap
+from wrapper import check_programs_wrap
 
 
 @click.command(name='forwarding')
 def cmd_forwarding():
-    enforce_wrap()
+    check_programs_wrap(['syctl', 'iptables'])
+
     result = subprocess.run([
         'sysctl',
         'net.ipv4.ip_forward=1',

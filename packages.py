@@ -10,7 +10,7 @@ from config import config
 from chroot import create_chroot
 from joblib import Parallel, delayed
 from distro import get_kupfer_local
-from wrapper import enforce_wrap
+from wrapper import enforce_wrap, check_programs_wrap
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
@@ -539,7 +539,7 @@ def cmd_build(paths: list[str], force=False, arch='aarch64'):
 
 @cmd_packages.command(name='clean')
 def cmd_clean():
-    enforce_wrap()
+    check_programs_wrap('git')
     result = subprocess.run([
         'git',
         'clean',
