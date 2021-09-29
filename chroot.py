@@ -65,7 +65,8 @@ def create_chroot(
     ],
                             capture_output=True)
     if result.returncode != 0:
-        raise Exception('Failed to install chroot:' + result.stdout.decode() + '\n' + result.stderr.decode())
+        logging.debug(result.stdout.decode())
+        raise Exception(f'Failed to install chroot "{chroot_name}":' + '\n' + result.stderr.decode())
     return chroot_path
 
 

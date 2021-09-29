@@ -6,10 +6,11 @@ from flash import cmd_flash
 from ssh import cmd_ssh
 from forwarding import cmd_forwarding
 from telnet import cmd_telnet
-from logger import logging, setup_logging, verbose_option, get_trace
+from logger import logging, setup_logging, verbose_option
 import click
 from config import config, config_option
 from wrapper import enforce_wrap, nowrapper_option
+from traceback import format_exc as get_trace
 
 
 @click.group()
@@ -28,8 +29,7 @@ def main():
     try:
         return cli(prog_name='kupferbootstrap')
     except Exception as err:
-        logging.debug(get_trace())
-        logging.fatal(err)
+        logging.fatal(get_trace())
         exit(1)
 
 

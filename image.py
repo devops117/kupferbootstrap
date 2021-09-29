@@ -134,7 +134,7 @@ def cmd_build():
 
     packages_dir = config.file['paths']['packages']
     if os.path.exists(packages_dir):
-        url = f'file://{packages_dir}/$repo',
+        url = f'file://{packages_dir}/$repo'
     else:
         url = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
     extra_repos = {repo: {'Server': url} for repo in REPOSITORIES}
