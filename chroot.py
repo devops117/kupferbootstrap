@@ -101,7 +101,7 @@ def create_chroot_user(
     if password:
         install_script += f'echo "{user}:{password}" | chpasswd'
     else:
-        install_script += 'passwd'
+        install_script += 'echo "Set user password:" && passwd'
     result = run_chroot_cmd(install_script, chroot_name=chroot_name, chroot_base_path=chroot_base_path)
     if result.returncode != 0:
         raise Exception('Failed to setup user')

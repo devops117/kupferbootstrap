@@ -119,7 +119,7 @@ def check_prebuilts(dir: str = None):
 
 
 def discover_packages(dir: str = None) -> dict[str, Package]:
-    dir = dir if dir else config.get_paths('pkgbuilds')
+    dir = dir if dir else config.get_path('pkgbuilds')
     packages = {}
     paths = []
 
@@ -287,8 +287,9 @@ def check_package_version_built(package: Package) -> bool:
 
     for line in result.stdout.decode('utf-8').split('\n'):
         if line != "":
-            file = os.path.basename(line)
-            if not os.path.exists(os.path.join(config.get_path('packages'), package.repo, file)):
+            file = os.path.join(config.get_path('packages'), package.repo, os.path.basename(line))
+            logging.debug(f'Checking if {file} is built')
+            if not os.path.exists(file):
                 built = False
 
     return built

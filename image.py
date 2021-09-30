@@ -173,7 +173,7 @@ def cmd_build():
     )
     create_chroot_user(chroot_name, user=profile['username'], password=profile['password'])
     if post_cmds:
-        result = run_chroot_cmd(' && '.join(post_cmds, chroot_name))
+        result = run_chroot_cmd(' && '.join(post_cmds), chroot_name)
         if result.returncode != 0:
             raise Exception('Error running post_cmds')
 

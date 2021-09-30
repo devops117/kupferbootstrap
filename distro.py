@@ -97,7 +97,7 @@ class Distro:
         extras = [Repo(name, url_template=info.url_template, arch=self.arch, options=info.options, scan=False) for name, info in extra_repos.items()]
         return '\n'.join(repo.config_snippet() for repo in (list(self.repos.values()) + extras))
 
-    def get_pacman_conf(self, extra_repos: dict[str, RepoInfo] = []):
+    def get_pacman_conf(self, extra_repos: dict[str, RepoInfo] = [], check_space=False):
         header = f'''
 #
 # /etc/pacman.conf
@@ -133,7 +133,7 @@ Architecture = {self.arch}
 #UseSyslog
 Color
 #NoProgressBar
-CheckSpace
+{'' if check_space else '#'}CheckSpace
 VerbosePkgLists
 ParallelDownloads = 8
 
