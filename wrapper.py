@@ -24,7 +24,30 @@ def wrap_docker():
         for source, destination in volume_mappings.items():
             result += ['-v', f'{source}:{destination}:z']
         return result
-        os.readl
+
+    def _filter_args(args):
+        """hack. filter out --config since it doesn't apply in docker"""
+        results = []
+        done = False
+        for i, arg in enumerate(args):
+            if done:
+                break
+            if arg[0] != '-':
+                results += args[i:]
+                done = True
+                break
+            for argname in ['--config', '-C']:
+                if arg.startswith(argname):
+                    done = True
+                    if arg != argname:  # arg is longer, assume --arg=value
+                        offset = 1
+                    else:
+                        offset = 2
+                    results += args[i + offset:]
+                    break
+            if not done:
+                results.append(arg)
+        return results
 
     script_path = os.path.dirname(os.path.realpath(__file__))
     with open(os.path.join(script_path, 'version.txt')) as version_file:
@@ -84,10 +107,10 @@ def wrap_docker():
             os.getcwd(): '/src',
             wrapped_config: '/root/.config/kupfer/kupferbootstrap.toml',
         }
-        volumes |= dict({(config.file['paths'][vol_name], vol_dest) for vol_name, vol_dest in DOCKER_PATHS.items()})
+        volumes |= dict({config.get_path(vol_name): vol_dest for vol_name, vol_dest in DOCKER_PATHS.items()})
         if os.getenv('KUPFERBOOTSTRAP_PREBUILTS'):
             volumes |= {os.getenv("KUPFERBOOTSTRAP_PREBUILTS"): '/prebuilts'}
-        cmd = [
+        docker_cmd = [
             'docker',
             'run',
             '--name',
@@ -96,7 +119,11 @@ def wrap_docker():
             '--interactive',
             '--tty',
             '--privileged',
-        ] + _docker_volumes(volumes) + [tag, 'kupferbootstrap'] + sys.argv[1:]
+        ] + _docker_volumes(volumes) + [tag]
+
+        kupfer_cmd = ['kupferbootstrap'] + _filter_args(sys.argv[1:])
+
+        cmd = docker_cmd + kupfer_cmd
         logging.debug('Wrapping in docker:' + repr(cmd))
         result = subprocess.run(cmd)
 

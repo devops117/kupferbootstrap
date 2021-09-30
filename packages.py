@@ -47,7 +47,7 @@ class Package:
 
     def __init__(self, path: str, dir: str = None) -> None:
         self.path = path
-        dir = dir if dir else config.file['paths']['pkgbuilds']
+        dir = dir if dir else config.get_path('pkgbuilds')
         self._loadinfo(dir)
 
     def _loadinfo(self, dir):
@@ -96,7 +96,7 @@ class Package:
 
 
 def check_prebuilts(dir: str = None):
-    prebuilts_dir = dir if dir else config.file['paths']['packages']
+    prebuilts_dir = dir if dir else config.get_path('packages')
     os.makedirs(prebuilts_dir, exist_ok=True)
     for repo in REPOSITORIES:
         os.makedirs(os.path.join(prebuilts_dir, repo), exist_ok=True)
@@ -119,7 +119,7 @@ def check_prebuilts(dir: str = None):
 
 
 def discover_packages(dir: str = None) -> dict[str, Package]:
-    dir = dir if dir else config.file['paths']['pkgbuilds']
+    dir = dir if dir else config.get_paths('pkgbuilds')
     packages = {}
     paths = []
 
@@ -288,7 +288,7 @@ def check_package_version_built(package: Package) -> bool:
     for line in result.stdout.decode('utf-8').split('\n'):
         if line != "":
             file = os.path.basename(line)
-            if not os.path.exists(os.path.join(config.file['paths']['packages'], package.repo, file)):
+            if not os.path.exists(os.path.join(config.get_path('packages'), package.repo, file)):
                 built = False
 
     return built
@@ -343,7 +343,7 @@ def setup_dependencies_and_sources(package: Package, chroot: str, repo_dir: str 
     To make cross-compilation work for almost every package, the host needs to have the dependencies installed
     so that the build tools can be used
     """
-    repo_dir = repo_dir if repo_dir else config.file['paths']['pkgbuilds']
+    repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
     makepkg_setup_args = [
         '--nobuild',
         '--holdver',
@@ -373,7 +373,7 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
         '--skipinteg',
         '--holdver',
     ]
-    repo_dir = repo_dir if repo_dir else config.file['paths']['pkgbuilds']
+    repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
     chroot = setup_build_chroot(arch=arch, extra_packages=package.depends)
     setup_dependencies_and_sources(package, chroot, enable_crosscompile=enable_crosscompile)
 
@@ -390,7 +390,7 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
                 stderr=subprocess.DEVNULL,
             )
 
-        base_chroot = os.path.join(config.file['paths']['chroots'], f'base_{arch}')
+        base_chroot = os.path.join(config.get_path('chroots'), f'base_{arch}')
         result = subprocess.run([
             'mount',
             '-o',
@@ -417,7 +417,7 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
             'mount',
             '-o',
             'bind',
-            config.file['paths']['pkgbuilds'],
+            config.get_path('pkgbuilds'),
             f'{chroot}/src',
         ])
 
@@ -455,8 +455,8 @@ def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable
 
 def add_package_to_repo(package: Package):
     logging.info(f'Adding {package.path} to repo')
-    binary_dir = os.path.join(config.file['paths']['packages'], package.repo)
-    pkgbuild_dir = os.path.join(config.file['paths']['pkgbuilds'], package.path)
+    binary_dir = os.path.join(config.get_path('packages'), package.repo)
+    pkgbuild_dir = os.path.join(config.get_path('pkgbuilds'), package.path)
     os.makedirs(binary_dir, exist_ok=True)
 
     for file in os.listdir(pkgbuild_dir):

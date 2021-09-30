@@ -11,7 +11,8 @@ from wrapper import enforce_wrap
 from signal import pause
 
 
-def get_device_and_flavour(profile=None) -> tuple[str, str]:
+def get_device_and_flavour(profile: str = None) -> tuple[str, str]:
+    #config.enforce_config_loaded()
     profile = config.get_profile(profile)
     if not profile['device']:
         raise Exception("Please set the device using 'kupferbootstrap config init ...'")
@@ -63,7 +64,7 @@ def dump_bootimg(image_name: str) -> str:
         f'dump /boot/boot.img {path}',
     ])
     if result.returncode != 0:
-        logging.fatal(f'Faild to dump boot.img')
+        logging.fatal('Failed to dump boot.img')
         exit(1)
     return path
 
@@ -80,7 +81,7 @@ def dump_lk2nd(image_name: str) -> str:
         f'dump /boot/lk2nd.img {path}',
     ])
     if result.returncode != 0:
-        logging.fatal(f'Faild to dump lk2nd.img')
+        logging.fatal('Failed to dump lk2nd.img')
         exit(1)
     return path
 
@@ -94,7 +95,7 @@ def dump_qhypstub(image_name: str) -> str:
         f'dump /boot/qhypstub.bin {path}',
     ])
     if result.returncode != 0:
-        logging.fatal('Faild to dump qhypstub.bin')
+        logging.fatal('Failed to dump qhypstub.bin')
         exit(1)
     return path
 
@@ -139,7 +140,7 @@ def cmd_build():
     rootfs_mount = get_chroot_path(chroot_name)
     mount_rootfs_image(image_name, rootfs_mount)
 
-    packages_dir = config.file['paths']['packages']
+    packages_dir = config.get_path('packages')
     if os.path.exists(os.path.join(packages_dir, 'main')):
         extra_repos = get_kupfer_local(arch).repos
     else:

@@ -5,7 +5,10 @@ import logging
 from copy import deepcopy
 import click
 
-CONFIG_DEFAULT_PATH = os.path.join(appdirs.user_config_dir('kupfer'), 'kupferbootstrap.toml')
+CONFIG_DIR = appdirs.user_config_dir('kupfer')
+CACHE_DIR = appdirs.user_cache_dir('kupfer')
+
+CONFIG_DEFAULT_PATH = os.path.join(CONFIG_DIR, 'kupferbootstrap.toml')
 
 Profile = dict[str, str]
 
@@ -26,10 +29,11 @@ CONFIG_DEFAULTS = {
         'threads': 0,
     },
     'paths': {
-        'chroots': os.path.join(appdirs.user_cache_dir('kupfer'), 'chroots'),
-        'pacman': os.path.join(appdirs.user_cache_dir('kupfer'), 'pacman'),
-        'jumpdrive': os.path.join(appdirs.user_cache_dir('kupfer'), 'jumpdrive'),
-        'packages': os.path.join(appdirs.user_cache_dir('kupfer'), 'packages'),
+        'cache_dir': CACHE_DIR,
+        'chroots': os.path.join('%cache_dir%', 'chroots'),
+        'pacman': os.path.join('%cache_dir%', 'pacman'),
+        'jumpdrive': os.path.join('%cache_dir%', 'jumpdrive'),
+        'packages': os.path.join('%cache_dir%', 'packages'),
         'pkgbuilds': os.path.abspath(os.getcwd()),
     },
     'profiles': {
@@ -44,6 +48,14 @@ CONFIG_RUNTIME_DEFAULTS = {
     'arch': None,
     'no_wrap': False,
 }
+
+
+def resolve_path_template(path_template: str, paths: dict[str, str]) -> str:
+    terminator = '%'  # i'll be back
+    result = path_template
+    for path_name, path in paths.items():
+        result = result.replace(terminator + path_name + terminator, path)
+    return result
 
 
 def resolve_profile(
@@ -70,6 +82,7 @@ def resolve_profile(
     if name in resolved:
         return resolved
 
+    logging.debug(f'Resolving profile {name}')
     _visited.append(name)
     sparse = sparse_profiles[name]
     full = deepcopy(sparse)
@@ -242,7 +255,7 @@ class ConfigStateHolder:
             self.file_state.exception = ex
         self.file_state.load_finished = True
 
-    def is_loaded(self):
+    def is_loaded(self) -> bool:
         return self.file_state.load_finished and self.file_state.exception is None
 
     def enforce_config_loaded(self):
@@ -255,11 +268,15 @@ class ConfigStateHolder:
                 msg = "File doesn't exist. Try running `kupferbootstrap config init` first?"
             raise ConfigLoadException(extra_msg=msg, inner_exception=ex)
 
-    def get_profile(self, name: str = None):
+    def get_profile(self, name: str = None) -> Profile:
         if not name:
             name = self.file['profiles']['current']
-        self._profile_cache = resolve_profile(name, self.file['profiles'], resolved=self._profile_cache)
+        self._profile_cache = resolve_profile(name=name, sparse_profiles=self.file['profiles'], resolved=self._profile_cache)
         return self._profile_cache[name]
+
+    def get_path(self, path_name: str) -> str:
+        paths = self.file['paths']
+        return resolve_path_template(paths[path_name], paths)
 
     def dump(self) -> str:
         dump_toml(self.file)

@@ -6,7 +6,7 @@ from distro import get_base_distros, RepoInfo
 
 
 def get_chroot_path(chroot_name, override_basepath: str = None) -> str:
-    base_path = config.file['paths']['chroots'] if not override_basepath else override_basepath
+    base_path = config.get_path('chroots') if not override_basepath else override_basepath
     return os.path.join(base_path, chroot_name)
 
 
