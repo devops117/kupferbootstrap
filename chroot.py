@@ -14,7 +14,7 @@ def create_chroot(
     chroot_name,
     arch='aarch64',
     packages=['base'],
-    pacman_conf='/app/local/etc/pacman.conf',
+    pacman_conf=os.path.join(config.runtime['script_source_dir'], 'local/etc/pacman.conf'),
     extra_repos: dict[str, RepoInfo] = {},
     chroot_base_path: str = None,
 ):

@@ -168,7 +168,7 @@ def cmd_build():
     create_chroot(
         chroot_name,
         packages=packages,
-        pacman_conf='/app/local/etc/pacman.conf',
+        pacman_conf=os.path.join(config.runtime['script_source_dir'], 'local/etc/pacman.conf'),
         extra_repos=extra_repos,
     )
     create_chroot_user(chroot_name, user=profile['username'], password=profile['password'])

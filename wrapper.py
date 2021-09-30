@@ -49,7 +49,7 @@ def wrap_docker():
                 results.append(arg)
         return results
 
-    script_path = os.path.dirname(os.path.realpath(__file__))
+    script_path = config.runtime['script_source_dir']
     with open(os.path.join(script_path, 'version.txt')) as version_file:
         version = version_file.read().replace('\n', '')
         tag = f'registry.gitlab.com/kupfer/kupferbootstrap:{version}'

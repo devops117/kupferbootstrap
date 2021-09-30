@@ -17,12 +17,12 @@ makepkg_env = os.environ.copy() | {
     'MAKEFLAGS': f"-j{multiprocessing.cpu_count() if config.file['build']['threads'] < 1 else config.file['build']['threads']}",
 }
 
-makepkg_cross_env = makepkg_env | {'PACMAN': '/app/local/bin/pacman_aarch64'}
+makepkg_cross_env = makepkg_env | {'PACMAN': os.path.join(config.runtime['script_source_dir'], '/local/bin/pacman_aarch64')}
 
 makepkg_cmd = [
     'makepkg',
     '--config',
-    '/app/local/etc/makepkg.conf',
+    os.path.join(config.runtime['script_source_dir'], 'local/etc/makepkg.conf'),
     '--noconfirm',
     '--ignorearch',
     '--needed',
@@ -301,7 +301,7 @@ def setup_build_chroot(arch='aarch64', extra_packages=[]) -> str:
     chroot_path = create_chroot(
         chroot_name,
         packages=['base-devel', 'git'] + extra_packages,
-        pacman_conf='/app/local/etc/pacman.conf',
+        pacman_conf=os.path.join(config.runtime['script_source_dir'], 'local/etc/pacman.conf'),
         extra_repos=get_kupfer_local(arch).repos,
     )
 
