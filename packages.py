@@ -458,6 +458,7 @@ def add_package_to_repo(package: Package):
     logging.info(f'Adding {package.path} to repo')
     binary_dir = os.path.join(config.get_path('packages'), package.repo)
     pkgbuild_dir = os.path.join(config.get_path('pkgbuilds'), package.path)
+    pacman_cache_dir = config.get_path('pacman')
     os.makedirs(binary_dir, exist_ok=True)
 
     for file in os.listdir(pkgbuild_dir):
@@ -467,6 +468,10 @@ def add_package_to_repo(package: Package):
                 os.path.join(pkgbuild_dir, file),
                 os.path.join(binary_dir, file),
             )
+            # clean up same name package from pacman cache
+            cache_file = os.path.join(pacman_cache_dir, file)
+            if os.path.exists(cache_file):
+                os.unlink(cache_file)
             result = subprocess.run([
                 'repo-add',
                 '--remove',
