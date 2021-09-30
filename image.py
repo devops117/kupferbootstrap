@@ -11,6 +11,24 @@ from wrapper import enforce_wrap
 from signal import pause
 
 
+def resize_fs(image_path: str, shrink: bool = False):
+    result = subprocess.run([
+        'e2fsck',
+        '-fy',
+        image_path,
+    ])
+    if result.returncode != 0:
+        msg = f'Failed to e2fsck {image_path}'
+        if shrink:
+            raise Exception(msg)
+        else:
+            logging.warning(msg)
+
+    result = subprocess.run(['resize2fs'] + (['-MP'] if shrink else []) + [image_path])
+    if result.returncode != 0:
+        raise Exception(f'Failed to resize2fs {image_path}')
+
+
 def get_device_and_flavour(profile: str = None) -> tuple[str, str]:
     #config.enforce_config_loaded()
     profile = config.get_profile(profile)
@@ -120,12 +138,11 @@ def cmd_build():
         result = subprocess.run([
             'fallocate',
             '-l',
-            '4G',
+            f"{FLAVOURS[flavour].get('size',4)}G",
             image_name,
         ])
         if result.returncode != 0:
-            logging.fatal(f'Failed to allocate {image_name}')
-            exit(1)
+            raise Exception(f'Failed to allocate {image_name}')
 
         result = subprocess.run([
             'mkfs.ext4',
@@ -134,8 +151,10 @@ def cmd_build():
             image_name,
         ])
         if result.returncode != 0:
-            logging.fatal(f'Failed to create ext4 filesystem on {image_name}')
-            exit(1)
+            raise Exception(f'Failed to create ext4 filesystem on {image_name}')
+    else:
+        resize_fs(image_path=image_name)
+
     chroot_name = f'rootfs_{device}-{flavour}'
     rootfs_mount = get_chroot_path(chroot_name)
     mount_rootfs_image(image_name, rootfs_mount)

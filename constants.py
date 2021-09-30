@@ -29,14 +29,15 @@ DEVICES = {
 
 FLAVOURS = {
     'barebone': {
-        'packages': []
+        'packages': [],
     },
     'debug-shell': {
-        'packages': ['hook-debug-shell']
+        'packages': ['hook-debug-shell'],
     },
     'gnome': {
         'packages': ['gnome', 'archlinux-appstream-data', 'gnome-software-packagekit-plugin'],
-        'post_cmds': ['systemctl enable gdm']
+        'post_cmds': ['systemctl enable gdm'],
+        'size': 8,
     },
 }
 

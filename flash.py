@@ -8,6 +8,7 @@ import subprocess
 import click
 import tempfile
 from wrapper import enforce_wrap
+from image import resize_fs
 
 BOOTIMG = FLASH_PARTS['BOOTIMG']
 LK2ND = FLASH_PARTS['LK2ND']
@@ -58,21 +59,7 @@ def cmd_flash(what, location):
 
         shutil.copyfile(image_name, image_path)
 
-        result = subprocess.run([
-            'e2fsck',
-            '-fy',
-            image_path,
-        ])
-        if result.returncode != 0:
-            raise Exception(f'Failed to e2fsck {image_path}')
-
-        result = subprocess.run([
-            'resize2fs',
-            '-M',
-            image_path,
-        ])
-        if result.returncode != 0:
-            raise Exception(f'Failed to resize2fs {image_path}')
+        resize_fs(image_path, shrink=True)
 
         if location.endswith('-file'):
             part_mount = '/mnt/kupfer/fs'
