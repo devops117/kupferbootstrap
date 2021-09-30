@@ -17,7 +17,7 @@ makepkg_env = os.environ.copy() | {
     'MAKEFLAGS': f"-j{multiprocessing.cpu_count() if config.file['build']['threads'] < 1 else config.file['build']['threads']}",
 }
 
-makepkg_cross_env = makepkg_env | {'PACMAN': os.path.join(config.runtime['script_source_dir'], '/local/bin/pacman_aarch64')}
+makepkg_cross_env = makepkg_env | {'PACMAN': os.path.join(config.runtime['script_source_dir'], 'local/bin/pacman_aarch64')}
 
 makepkg_cmd = [
     'makepkg',
