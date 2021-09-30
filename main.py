@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from packages import cmd_packages
 from cache import cmd_cache
 from image import cmd_image
