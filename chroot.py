@@ -48,6 +48,8 @@ def create_chroot(
     with open(pacman_conf_target, 'w') as file:
         file.write(conf_text)
 
+    logging.info(f'Installing packages to {chroot_name}: {", ".join(packages)}')
+
     result = subprocess.run([
         'pacstrap',
         '-C',
@@ -59,11 +61,9 @@ def create_chroot(
         '--needed',
         '--overwrite=*',
         '-yyuu',
-    ],
-                            capture_output=True)
+    ])
     if result.returncode != 0:
-        logging.debug(result.stdout.decode())
-        raise Exception(f'Failed to install chroot "{chroot_name}":' + '\n' + result.stderr.decode())
+        raise Exception(f'Failed to install chroot "{chroot_name}"')
     return chroot_path
 
 
