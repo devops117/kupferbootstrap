@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from constants import REPOSITORIES
 from config import config
-from chroot import create_chroot
+from chroot import create_chroot, run_chroot_cmd
 from joblib import Parallel, delayed
 from distro import get_kupfer_local
 from wrapper import enforce_wrap, check_programs_wrap
@@ -282,7 +282,7 @@ def check_package_version_built(package: Package) -> bool:
         capture_output=True,
     )
     if result.returncode != 0:
-        logging.fatal(f'Failed to get package list for {package.path}')
+        logging.fatal(f'Failed to get package list for {package.path}:' + '\n' + result.stdout.decode() + '\n' + result.stderr.decode())
         exit(1)
 
     for line in result.stdout.decode('utf-8').split('\n'):
@@ -295,13 +295,13 @@ def check_package_version_built(package: Package) -> bool:
     return built
 
 
-def setup_build_chroot(arch='aarch64', extra_packages=[]) -> str:
+def setup_build_chroot(arch: str, extra_packages=[]) -> str:
     chroot_name = f'build_{arch}'
     logging.info(f'Initializing {arch} build chroot')
     chroot_path = create_chroot(
         chroot_name,
+        arch=arch,
         packages=['base-devel', 'git'] + extra_packages,
-        pacman_conf=os.path.join(config.runtime['script_source_dir'], 'local/etc/pacman.conf'),
         extra_repos=get_kupfer_local(arch).repos,
     )
 
@@ -338,27 +338,15 @@ def setup_build_chroot(arch='aarch64', extra_packages=[]) -> str:
     return chroot_path
 
 
-def setup_dependencies_and_sources(package: Package, chroot: str, repo_dir: str = None, enable_crosscompile: bool = True):
-    logging.info(f'Setting up dependencies and sources for {package.path} in {chroot}')
-    """
-    To make cross-compilation work for almost every package, the host needs to have the dependencies installed
-    so that the build tools can be used
-    """
+def setup_sources(package: Package, chroot: str, repo_dir: str = None, enable_crosscompile: bool = True):
     repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
     makepkg_setup_args = [
         '--nobuild',
         '--holdver',
         '--nodeps',
     ]
-    if (package.mode == 'cross' and enable_crosscompile):
-        logging.info('Setting up dependencies for cross-compilation')
-        for p in package.depends:
-            # Don't check for errors here because there might be packages that are listed as dependencies but are not available on x86_64
-            subprocess.run(
-                pacman_cmd + [p],
-                stderr=subprocess.DEVNULL,
-            )
 
+    logging.info(f'Setting up sources for {package.path} in {chroot}')
     result = subprocess.run(
         [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + makepkg_setup_args,
         env=makepkg_cross_env | {'PACMAN_CHROOT': chroot},
@@ -368,90 +356,109 @@ def setup_dependencies_and_sources(package: Package, chroot: str, repo_dir: str 
         raise Exception(f'Failed to check sources for {package.path}')
 
 
-def build_package(package: Package, repo_dir: str = None, arch='aarch64', enable_crosscompile: bool = True):
+def build_package(package: Package, arch: str, repo_dir: str = None, enable_crosscompile: bool = True, enable_crossdirect: bool = True):
     makepkg_compile_opts = [
         '--noextract',
         '--skipinteg',
         '--holdver',
     ]
     repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
+    foreign_arch = config.runtime['arch'] != arch
     chroot = setup_build_chroot(arch=arch, extra_packages=package.depends)
-    setup_dependencies_and_sources(package, chroot, enable_crosscompile=enable_crosscompile)
+    native_chroot = setup_build_chroot(arch=config.runtime['arch'], extra_packages=['base-devel']) if foreign_arch else chroot
+    cross = foreign_arch and package.mode == 'cross' and enable_crosscompile
+    native_deps = []
+    env = {}
 
-    if package.mode == 'cross' and enable_crosscompile:
+    if cross:
         logging.info(f'Cross-compiling {package.path}')
+        build_root = native_chroot
+        makepkg_compile_opts += ['--nodeps']
+        env = makepkg_cross_env | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'}
 
         def umount():
             subprocess.run(
                 [
                     'umount',
                     '-lc',
-                    '/usr/share/i18n/locales',
+                    f'{native_chroot}/usr/share/i18n/locales',
                 ],
                 stderr=subprocess.DEVNULL,
             )
 
-        base_chroot = os.path.join(config.get_path('chroots'), f'base_{arch}')
         result = subprocess.run([
             'mount',
             '-o',
             'bind',
-            f"{base_chroot}/usr/share/i18n/locales",
-            '/usr/share/i18n/locales',
+            f"{chroot}/usr/share/i18n/locales",
+            f'{native_chroot}/usr/share/i18n/locales',
         ])
-        if result.returncode != 0:
-            logging.fatal(f'Failed to bind mount glibc locales from chroot {base_chroot}')
-            exit(1)
-
-        result = subprocess.run(
-            [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + ['--nodeps'] + makepkg_compile_opts,
-            env=makepkg_cross_env | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
-            cwd=os.path.join(repo_dir, package.path),
-        )
-        if result.returncode != 0:
-            logging.fatal(f'Failed to cross-compile package {package.path}')
-            exit(1)
-    else:
-        logging.info(f'Host-compiling {package.path}')
-        os.makedirs(f'{chroot}/src', exist_ok=True)
-        result = subprocess.run([
-            'mount',
-            '-o',
-            'bind',
-            config.get_path('pkgbuilds'),
-            f'{chroot}/src',
-        ])
-
-        def umount():
-            subprocess.run(
-                [
-                    'umount',
-                    '-lc',
-                    f'/{chroot}/src',
-                ],
-                stderr=subprocess.DEVNULL,
-            )
-
         atexit.register(umount)
 
-        if result.returncode != 0:
-            logging.fatal(f'Failed to bind mount pkgdirs to {chroot}/src')
-            exit(1)
+        logging.info('Setting up dependencies for cross-compilation')
+        native_deps += package.depends
+    else:
+        logging.info(f'Host-compiling {package.path}')
+        build_root = chroot
+        makepkg_compile_opts += ['--syncdeps']
+        env = makepkg_env
+        if foreign_arch and enable_crossdirect:
+            logging.debug('Activating crossdirect')
+            native_deps += ['crossdirect']
+            env['PATH'] = f"/native/usr/lib/crossdirect/{arch}:{env['PATH']}"
 
-        env = [f'{key}={value}' for key, value in makepkg_env.items()]
-        result = subprocess.run([
-            'arch-chroot',
-            chroot,
-            '/usr/bin/env',
-        ] + env + [
-            '/bin/bash',
-            '-c',
-            f'cd /src/{package.path} && makepkg --syncdeps --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}',
-        ])
-        umount()
-        if result.returncode != 0:
-            logging.fatal(f'Failed to host-compile package {package.path}')
-            exit(1)
+            def umount():
+                subprocess.run(
+                    [
+                        'umount',
+                        '-lc',
+                        f'{chroot}/native',
+                    ],
+                    stderr=subprocess.DEVNULL,
+                )
+
+            result = subprocess.run([
+                'mount',
+                '-o',
+                'bind',
+                f"{native_chroot}",
+                f'{chroot}/native',
+            ])
+            atexit.register(umount)
+
+    os.makedirs(f'{build_root}/src', exist_ok=True)
+    setup_sources(package, build_root, enable_crosscompile=enable_crosscompile)
+    for dep in native_deps:
+        # Don't check for errors here because there might be packages that are listed as dependencies but are not available on x86_64
+        run_chroot_cmd(f'pacman -Sy {dep}', native_chroot)
+    result = subprocess.run([
+        'mount',
+        '-o',
+        'bind',
+        config.get_path('pkgbuilds'),
+        f'{build_root}/src',
+    ])
+
+    def umount():
+        subprocess.run(
+            [
+                'umount',
+                '-lc',
+                f'/{build_root}/src',
+            ],
+            stderr=subprocess.DEVNULL,
+        )
+
+    atexit.register(umount)
+
+    if result.returncode != 0:
+        raise Exception(f'Failed to bind mount pkgdirs to {build_root}/src')
+
+    build_cmd = f'cd /src/{package.path} && makepkg --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
+    result = run_chroot_cmd(build_cmd, chroot_path=build_root, env=env)
+    umount()
+    if result.returncode != 0:
+        raise Exception(f'Failed to compile package {package.path}')
 
 
 def add_package_to_repo(package: Package):
@@ -505,9 +512,14 @@ def cmd_packages():
 
 @cmd_packages.command(name='build')
 @click.option('--force', is_flag=True, default=False)
+@click.option('--arch', default=None)
 @click.argument('paths', nargs=-1)
-def cmd_build(paths: list[str], force=False, arch='aarch64'):
+def cmd_build(paths: list[str], force=False, arch=None):
     enforce_wrap()
+    if arch is None:
+        # arch = config.get_profile()...
+        arch = 'aarch64'
+
     check_prebuilts()
 
     paths = list(paths)

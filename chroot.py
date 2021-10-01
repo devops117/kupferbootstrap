@@ -3,6 +3,7 @@ import subprocess
 import os
 from config import config
 from distro import get_base_distros, RepoInfo
+from shlex import quote as shell_quote
 
 
 def get_chroot_path(chroot_name, override_basepath: str = None) -> str:
@@ -11,10 +12,9 @@ def get_chroot_path(chroot_name, override_basepath: str = None) -> str:
 
 
 def create_chroot(
-    chroot_name,
-    arch='aarch64',
-    packages=['base'],
-    pacman_conf=os.path.join(config.runtime['script_source_dir'], 'local/etc/pacman.conf'),
+    chroot_name: str,
+    arch: str,
+    packages: list[str] = ['base'],
     extra_repos: dict[str, RepoInfo] = {},
     chroot_base_path: str = None,
 ):
@@ -67,15 +67,10 @@ def create_chroot(
     return chroot_path
 
 
-def run_chroot_cmd(
-    script: str,
-    chroot_name,
-    chroot_base_path: str = None,
-):
-    chroot_path = get_chroot_path(chroot_name, override_basepath=chroot_base_path)
-    result = subprocess.run([
-        'arch-chroot',
-        chroot_path,
+def run_chroot_cmd(script: str, chroot_path: str, env: dict[str, str] = {}):
+
+    env_cmd = ['/usr/bin/env'] + [f'{shell_quote(key)}={shell_quote(value)}' for key, value in env.items()]
+    result = subprocess.run(['arch-chroot', chroot_path] + env_cmd + [
         '/bin/bash',
         '-c',
         script,
@@ -84,8 +79,7 @@ def run_chroot_cmd(
 
 
 def create_chroot_user(
-    chroot_name,
-    chroot_base_path: str = None,
+    chroot_path: str,
     user='kupfer',
     password='123456',
     groups=['network', 'video', 'audio', 'optical', 'storage', 'input', 'scanner', 'games', 'lp', 'rfkill', 'wheel'],
@@ -102,6 +96,6 @@ def create_chroot_user(
         install_script += f'echo "{user}:{password}" | chpasswd'
     else:
         install_script += 'echo "Set user password:" && passwd'
-    result = run_chroot_cmd(install_script, chroot_name=chroot_name, chroot_base_path=chroot_base_path)
+    result = run_chroot_cmd([install_script], chroot_path=chroot_path)
     if result.returncode != 0:
         raise Exception('Failed to setup user')
