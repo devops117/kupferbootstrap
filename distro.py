@@ -112,7 +112,7 @@ class Distro:
 # If you wish to use different paths, uncomment and update the paths.
 #RootDir     = /
 #DBPath      = /var/lib/pacman/
-#CacheDir    = /var/cache/pacman/pkg/
+CacheDir    = /var/cache/pacman/{self.arch}/
 #LogFile     = /var/log/pacman.log
 #GPGDir      = /etc/pacman.d/gnupg/
 #HookDir     = /etc/pacman.d/hooks/
