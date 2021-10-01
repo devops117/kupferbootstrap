@@ -1,4 +1,6 @@
 from shutil import which
+import atexit
+import subprocess
 
 
 def programs_available(programs) -> bool:
@@ -8,3 +10,33 @@ def programs_available(programs) -> bool:
         if not which(program):
             return False
     return True
+
+
+def umount(dest):
+    return subprocess.run(
+        [
+            'umount',
+            '-lc',
+            dest,
+        ],
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def mount(src: str, dest: str, options=['bind'], type=None) -> subprocess.CompletedProcess:
+    opts = []
+    type = []
+
+    for opt in options:
+        opts += ['-o', opt]
+
+    if type:
+        type = ['-t', type]
+
+    result = subprocess.run(['mount'] + type + opts + [
+        src,
+        dest,
+    ])
+    if result.returncode == 0:
+        atexit.register(umount, dest)
+    return result

@@ -172,6 +172,7 @@ def cmd_build():
         packages=packages,
         pacman_conf=os.path.join(config.runtime['script_source_dir'], 'local/etc/pacman.conf'),
         extra_repos=extra_repos,
+        bind_mounts={},
     )
     create_chroot_user(chroot_name, user=profile['username'], password=profile['password'])
     if post_cmds:

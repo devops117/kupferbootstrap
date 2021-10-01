@@ -49,6 +49,7 @@ REPOSITORIES = [
     'main',
 ]
 
+Arch = str
 ARCHES = [
     'x86_64',
     'aarch64',
@@ -74,3 +75,15 @@ BASE_DISTROS = {
 }
 
 KUPFER_HTTPS = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
+
+DistroArch = TargetArch = Arch
+
+GCC_HOSTSPECS: dict[DistroArch, dict[TargetArch, str]] = {
+    'x86_64': {
+        'x86_64': 'x86_64-pc-linux-gnu',
+        'aarch64': 'aarch64-linux-gnu',
+    },
+    'aarch64': {
+        'aarch64': 'aarch64-unknown-linux-gnu',
+    }
+}

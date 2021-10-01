@@ -11,7 +11,7 @@ from utils import programs_available
 DOCKER_PATHS = {
     'chroots': '/chroot',
     'jumpdrive': '/var/cache/jumpdrive',
-    'pacman': '/var/cache/pacman/pkg',
+    'pacman': '/var/cache/pacman',
     'packages': '/prebuilts',
     'pkgbuilds': '/src',
 }

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 
+import click
+from traceback import format_exc as get_trace
+from logger import logging, setup_logging, verbose_option
+from wrapper import nowrapper_option
+from config import config, config_option, cmd_config
+from forwarding import cmd_forwarding
 from packages import cmd_packages
+from telnet import cmd_telnet
+from chroot import cmd_chroot
 from cache import cmd_cache
 from image import cmd_image
 from boot import cmd_boot
 from flash import cmd_flash
 from ssh import cmd_ssh
-from forwarding import cmd_forwarding
-from telnet import cmd_telnet
-from logger import logging, setup_logging, verbose_option
-import click
-from config import config, config_option, cmd_config
-from wrapper import nowrapper_option
-from traceback import format_exc as get_trace
 
 
 @click.group()
@@ -43,6 +44,7 @@ cli.add_command(cmd_flash)
 cli.add_command(cmd_ssh)
 cli.add_command(cmd_forwarding)
 cli.add_command(cmd_telnet)
+cli.add_command(cmd_chroot)
 
 if __name__ == '__main__':
     main()
