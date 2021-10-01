@@ -1,7 +1,7 @@
 import click
 import subprocess
 from logger import logging
-from ssh import cmd_ssh
+from ssh import run_ssh_command
 from wrapper import check_programs_wrap
 
 
@@ -42,7 +42,7 @@ def cmd_forwarding():
         logging.fatal(f'Failed set iptables rule')
         exit(1)
 
-    result = cmd_ssh(cmd=['sudo route add default gw 172.16.42.2'])
+    result = run_ssh_command(cmd=['sudo -S route add default gw 172.16.42.2'])
     if result.returncode != 0:
         logging.fatal(f'Failed to add gateway over ssh')
         exit(1)
