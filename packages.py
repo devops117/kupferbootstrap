@@ -413,7 +413,7 @@ def add_package_to_repo(package: Package, arch: str):
 
     for file in os.listdir(pkgbuild_dir):
         # Forced extension by makepkg.conf
-        if file.endswith('.pkg.tar.xz'):
+        if file.endswith('.pkg.tar.xz') or file.endswith('.pkg.tar.zst'):
             shutil.move(
                 os.path.join(pkgbuild_dir, file),
                 os.path.join(binary_dir, file),
