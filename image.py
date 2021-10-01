@@ -17,7 +17,9 @@ def resize_fs(image_path: str, shrink: bool = False):
         '-fy',
         image_path,
     ])
-    if result.returncode != 0:
+    # https://man7.org/linux/man-pages/man8/e2fsck.8.html#EXIT_CODE
+    if result.returncode > 2:
+        print(result.returncode)
         msg = f'Failed to e2fsck {image_path}'
         if shrink:
             raise Exception(msg)
