@@ -287,6 +287,7 @@ class ConfigStateHolder:
             path = self.runtime['config_file']
         os.makedirs(os.path.dirname(path), exist_ok=True)
         dump_file(path, self.file)
+        logging.info(f'Created config file at {path}')
 
 
 config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
