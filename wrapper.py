@@ -108,8 +108,6 @@ def wrap_docker():
             wrapped_config: '/root/.config/kupfer/kupferbootstrap.toml',
         }
         volumes |= dict({config.get_path(vol_name): vol_dest for vol_name, vol_dest in DOCKER_PATHS.items()})
-        if os.getenv('KUPFERBOOTSTRAP_PREBUILTS'):
-            volumes |= {os.getenv("KUPFERBOOTSTRAP_PREBUILTS"): '/prebuilts'}
         docker_cmd = [
             'docker',
             'run',
