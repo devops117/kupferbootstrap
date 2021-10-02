@@ -96,14 +96,18 @@ def create_chroot(chroot_name: str,
     return chroot_path
 
 
-def run_chroot_cmd(script: str, chroot_path: str, env: dict[str, str] = {}) -> subprocess.CompletedProcess:
-
-    env_cmd = ['/usr/bin/env'] + [f'{shell_quote(key)}={shell_quote(value)}' for key, value in env.items()]
+def run_chroot_cmd(script: str,
+                   chroot_path: str,
+                   inner_env: dict[str, str] = {},
+                   outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'}) -> subprocess.CompletedProcess:
+    if outer_env is None:
+        outer_env = os.environ.copy()
+    env_cmd = ['/usr/bin/env'] + [f'{shell_quote(key)}={shell_quote(value)}' for key, value in inner_env.items()]
     result = subprocess.run(['arch-chroot', chroot_path] + env_cmd + [
         '/bin/bash',
         '-c',
         script,
-    ])
+    ], env=outer_env)
     return result
 
 
@@ -146,7 +150,7 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
 
     native_mount = os.path.join(target_chroot, 'native')
     logging.debug(f'Activating crossdirect in {native_mount}')
-    results = try_install_packages(['crossdirect', gcc], native_chroot)
+    results = try_install_packages(['crossdirect', 'qemu-user-static-bin', 'binfmt-qemu-static-all-arch', gcc], native_chroot)
     if results[gcc].returncode != 0:
         logging.debug('Failed to install cross-compiler package {gcc}')
     if results['crossdirect'].returncode != 0:
@@ -163,7 +167,7 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
 @click.command('chroot')
 @click.argument('type', required=False, default='build')
 @click.argument('arch', required=False, default=None)
-def cmd_chroot(type: str = 'build', arch: str = None):
+def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
     chroot_path = ''
     if type not in ['base', 'build', 'rootfs']:
         raise Exception('Unknown chroot type: ' + type)
@@ -196,7 +200,7 @@ def cmd_chroot(type: str = 'build', arch: str = None):
             native_chroot = create_chroot(
                 'build_' + native_arch,
                 native_arch,
-                packages=['base-devel', 'crossdirect'],
+                packages=['base-devel'] + (['crossdirect', 'qemu-user-static-bin', 'binfmt-qemu-static-all-arch'] if enable_crossdirect else []),
                 extra_repos=get_kupfer_local(native_arch).repos,
             )
             mount_crossdirect(native_chroot=native_chroot, target_chroot=chroot_path, target_arch=arch)

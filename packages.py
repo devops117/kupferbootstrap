@@ -302,7 +302,7 @@ def setup_build_chroot(arch: str, extra_packages=[]) -> str:
     chroot_path = create_chroot(
         chroot_name,
         arch=arch,
-        packages=list(set(['base-devel', 'git'] + extra_packages)),
+        packages=list(set(['base-devel', 'git', 'ccache'] + extra_packages)),
         extra_repos=get_kupfer_local(arch).repos,
     )
 
@@ -370,7 +370,7 @@ def build_package(package: Package, arch: str, repo_dir: str = None, enable_cros
         logging.info(f'Cross-compiling {package.path}')
         build_root = native_chroot
         makepkg_compile_opts += ['--nodeps']
-        env = makepkg_env | {'QEMU_LD_PREFIX': '/usr/aarch64-unknown-linux-gnu'}
+        env = makepkg_env
 
         logging.info('Setting up dependencies for cross-compilation')
         try_install_packages(package.depends, native_chroot)
@@ -381,7 +381,7 @@ def build_package(package: Package, arch: str, repo_dir: str = None, enable_cros
         env = makepkg_env
         if not foreign_arch:
             logging.debug('Building for native arch, skipping crossdirect.')
-        elif enable_crossdirect and not package.name == 'crossdirect':
+        elif enable_crossdirect and not package.name in ['crossdirect', 'qemu-user-static-bin', 'binfmt-qemu-static-all-arch']:
             env['PATH'] = f"/native/usr/lib/crossdirect/{arch}:{env['PATH']}"
             mount_crossdirect(native_chroot=native_chroot, target_chroot=target_chroot, target_arch=arch)
         else:
@@ -396,7 +396,7 @@ def build_package(package: Package, arch: str, repo_dir: str = None, enable_cros
         raise Exception(f'Failed to bind mount pkgdirs to {build_root}/src')
 
     build_cmd = f'cd /src/{package.path} && echo $PATH && makepkg --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
-    result = run_chroot_cmd(build_cmd, chroot_path=build_root, env=env)
+    result = run_chroot_cmd(build_cmd, chroot_path=build_root, inner_env=env)
     umount_result = umount(src_dir)
     if umount_result != 0:
         logging.warning(f'Failed to unmount {src_dir}')
