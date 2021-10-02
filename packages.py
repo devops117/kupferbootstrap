@@ -345,8 +345,6 @@ def setup_sources(package: Package, chroot: str, repo_dir: str = None, enable_cr
 
 def build_package(package: Package, arch: str, repo_dir: str = None, enable_crosscompile: bool = True, enable_crossdirect: bool = True):
     makepkg_compile_opts = [
-        '--noextract',
-        '--skipinteg',
         '--holdver',
     ]
     repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
