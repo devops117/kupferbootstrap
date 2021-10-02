@@ -1,5 +1,4 @@
 import click
-import atexit
 import logging
 import multiprocessing
 import os
