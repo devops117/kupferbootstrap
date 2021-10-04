@@ -11,6 +11,7 @@ from distro import get_kupfer_local
 from wrapper import enforce_wrap
 from constants import GCC_HOSTSPECS, CROSSDIRECT_PKGS
 from glob import glob
+from generator import generate_makepkg_conf
 
 BIND_BUILD_DIRS = 'BINDBUILDDIRS'
 
@@ -169,6 +170,18 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
     result = mount(native_chroot, native_mount)
     if result.returncode != 0:
         raise Exception(f'Failed to mount native chroot {native_chroot} to {native_mount}')
+
+
+def write_cross_makepkg_conf(native_chroot: str, arch: str, target_chroot_relative: str, cross: bool = True) -> str:
+    """
+    Generate a makepkg_cross_$arch.conf file in `native_chroot`/etc, building for `target_chroot_relative`
+    Returns the absolute (host) path to the makepkg config file.
+    """
+    makepkg_cross_conf = generate_makepkg_conf(arch, cross=cross, chroot=target_chroot_relative)
+    makepkg_conf_path = os.path.join(native_chroot, 'etc', f'makepkg_cross_{arch}.conf')
+    with open(makepkg_conf_path, 'w') as f:
+        f.write(makepkg_cross_conf)
+    return makepkg_conf_path
 
 
 @click.command('chroot')

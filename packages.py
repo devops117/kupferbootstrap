@@ -9,11 +9,10 @@ from joblib import Parallel, delayed
 
 from constants import REPOSITORIES, CROSSDIRECT_PKGS, GCC_HOSTSPECS
 from config import config
-from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect
+from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect, write_cross_makepkg_conf
 from distro import get_kupfer_local
 from wrapper import enforce_wrap, check_programs_wrap
 from utils import mount, umount
-from generator import generate_makepkg_conf
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
@@ -239,7 +238,7 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
                 if pkg_done:
                     break
                 if type(other_pkg) != Package:
-                    logging.fatal('Wtf, this is not a package:' + repr(other_pkg))
+                    raise Exception('Not a Package object:' + repr(other_pkg))
                 for dep_name in other_pkg.depends:
                     if dep_name in pkg.names:
                         dep_levels[level].remove(pkg)
@@ -272,11 +271,15 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
     return list([lvl for lvl in dep_levels[::-1] if lvl])
 
 
-def check_package_version_built(package: Package) -> bool:
+def check_package_version_built(package: Package, arch) -> bool:
     built = True
+
+    config_path = write_cross_makepkg_conf(native_chroot='/', arch=arch, target_chroot_relative=None, cross=False)
 
     result = subprocess.run(
         makepkg_cmd + [
+            '--config',
+            config_path,
             '--nobuild',
             '--noprepare',
             '--packagelist',
@@ -387,10 +390,7 @@ def build_package(
         # mount foreign arch chroot inside native chroot
         chroot_relative = os.path.join('chroot', os.path.basename(target_chroot))
         chroot_mount_path = os.path.join(native_chroot, chroot_relative)
-        makepkg_cross_conf = generate_makepkg_conf(arch, cross=True, chroot=chroot_relative)
-        makepkg_conf_path = os.path.join('etc', f'makepkg_cross_{arch}.conf')
-        with open(os.path.join(native_chroot, makepkg_conf_path), 'w') as f:
-            f.write(makepkg_cross_conf)
+        write_cross_makepkg_conf(native_chroot=native_chroot, arch=arch, target_chroot_relative=chroot_relative)
         os.makedirs(chroot_mount_path)
         mount(target_chroot, chroot_mount_path)
     else:
@@ -500,7 +500,7 @@ def cmd_build(paths: list[str], force=False, arch=None):
     for packages in package_levels:
         level = set[Package]()
         for package in packages:
-            if ((not check_package_version_built(package)) or set.intersection(set(package.depends), set(build_names)) or
+            if ((not check_package_version_built(package, arch)) or set.intersection(set(package.depends), set(build_names)) or
                 (force and package.path in paths)):
                 level.add(package)
                 build_names.update(package.names)
