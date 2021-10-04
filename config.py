@@ -25,7 +25,7 @@ PROFILE_DEFAULTS: Profile = {
 
 CONFIG_DEFAULTS = {
     'build': {
-        'crosscompile': False,  # currently broken
+        'crosscompile': True,
         'crossdirect': True,
         'threads': 0,
     },
