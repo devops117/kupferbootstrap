@@ -88,4 +88,4 @@ GCC_HOSTSPECS: dict[DistroArch, dict[TargetArch, str]] = {
     }
 }
 
-CROSSDIRECT_PKGS = ['crossdirect', 'qemu-user-static-bin', 'binfmt-qemu-static-all-arch']
+CROSSDIRECT_PKGS = ['crossdirect', 'qemu-user-static-bin', 'binfmt-qemu-static']

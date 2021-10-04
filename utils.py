@@ -19,7 +19,7 @@ def umount(dest):
             '-lc',
             dest,
         ],
-        stderr=subprocess.DEVNULL,
+        capture_output=True,
     )
 
 
@@ -37,6 +37,9 @@ def mount(src: str, dest: str, options=['bind'], type=None) -> subprocess.Comple
         src,
         dest,
     ])
+    if result.returncode == 0:
+        atexit.register(umount, dest)
+    return result
     if result.returncode == 0:
         atexit.register(umount, dest)
     return result

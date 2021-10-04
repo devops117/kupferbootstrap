@@ -5,10 +5,12 @@ import os
 from config import config
 from distro import get_base_distros, RepoInfo
 from shlex import quote as shell_quote
+from shutil import copy
 from utils import mount
 from distro import get_kupfer_local
 from wrapper import enforce_wrap
-from constants import GCC_HOSTSPECS
+from constants import GCC_HOSTSPECS, CROSSDIRECT_PKGS
+from glob import glob
 
 BIND_BUILD_DIRS = 'BINDBUILDDIRS'
 
@@ -99,11 +101,13 @@ def create_chroot(chroot_name: str,
 def run_chroot_cmd(script: str,
                    chroot_path: str,
                    inner_env: dict[str, str] = {},
-                   outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'}) -> subprocess.CompletedProcess:
+                   outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
+                   attach_tty=False) -> subprocess.CompletedProcess:
     if outer_env is None:
         outer_env = os.environ.copy()
     env_cmd = ['/usr/bin/env'] + [f'{shell_quote(key)}={shell_quote(value)}' for key, value in inner_env.items()]
-    result = subprocess.run(['arch-chroot', chroot_path] + env_cmd + [
+    run_func = subprocess.call if attach_tty else subprocess.run
+    result = run_func(['arch-chroot', chroot_path] + env_cmd + [
         '/bin/bash',
         '-c',
         script,
@@ -150,13 +154,16 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
 
     native_mount = os.path.join(target_chroot, 'native')
     logging.debug(f'Activating crossdirect in {native_mount}')
-    results = try_install_packages(['crossdirect', 'qemu-user-static-bin', 'binfmt-qemu-static-all-arch', gcc], native_chroot)
+    results = try_install_packages(CROSSDIRECT_PKGS + [gcc], native_chroot)
     if results[gcc].returncode != 0:
         logging.debug('Failed to install cross-compiler package {gcc}')
     if results['crossdirect'].returncode != 0:
         raise Exception('Failed to install crossdirect')
 
     os.makedirs(native_mount, exist_ok=True)
+
+    ld_so = glob(f"{os.path.join('native_chroot', 'usr', 'lib', 'ld-linux-')}*")[0]
+    copy(ld_so, os.path.join(target_chroot, 'usr', 'lib'))
 
     logging.debug(f'Mounting {native_chroot} to {native_mount}')
     result = mount(native_chroot, native_mount)
@@ -200,7 +207,7 @@ def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
             native_chroot = create_chroot(
                 'build_' + native_arch,
                 native_arch,
-                packages=['base-devel'] + (['crossdirect', 'qemu-user-static-bin', 'binfmt-qemu-static-all-arch'] if enable_crossdirect else []),
+                packages=['base-devel'] + (CROSSDIRECT_PKGS if enable_crossdirect else []),
                 extra_repos=get_kupfer_local(native_arch).repos,
             )
             mount_crossdirect(native_chroot=native_chroot, target_chroot=chroot_path, target_arch=arch)

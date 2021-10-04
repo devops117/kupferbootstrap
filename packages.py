@@ -4,17 +4,19 @@ import multiprocessing
 import os
 import shutil
 import subprocess
-from constants import REPOSITORIES
+from constants import REPOSITORIES, CROSSDIRECT_PKGS, GCC_HOSTSPECS
 from config import config
 from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect
 from joblib import Parallel, delayed
 from distro import get_kupfer_local
 from wrapper import enforce_wrap, check_programs_wrap
 from utils import mount, umount
+from copy import deepcopy
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
     'MAKEFLAGS': f"-j{multiprocessing.cpu_count() if config.file['build']['threads'] < 1 else config.file['build']['threads']}",
+    'QEMU_LD_PREFIX': '/usr/aarch64-unknown-linux-gnu'
 }
 
 makepkg_cross_env = makepkg_env | {'PACMAN': os.path.join(config.runtime['script_source_dir'], 'local/bin/pacman_aarch64')}
@@ -324,7 +326,7 @@ def setup_build_chroot(arch: str, extra_packages=[]) -> str:
     return chroot_path
 
 
-def setup_sources(package: Package, chroot: str, repo_dir: str = None, enable_crosscompile: bool = True):
+def setup_sources(package: Package, chroot: str, arch: str, repo_dir: str = None):
     repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
     makepkg_setup_args = [
         '--nobuild',
@@ -342,7 +344,14 @@ def setup_sources(package: Package, chroot: str, repo_dir: str = None, enable_cr
         raise Exception(f'Failed to check sources for {package.path}')
 
 
-def build_package(package: Package, arch: str, repo_dir: str = None, enable_crosscompile: bool = True, enable_crossdirect: bool = True):
+def build_package(
+    package: Package,
+    arch: str,
+    repo_dir: str = None,
+    enable_crosscompile: bool = True,
+    enable_crossdirect: bool = True,
+    enable_ccache=True,
+):
     makepkg_compile_opts = [
         '--holdver',
     ]
@@ -351,7 +360,6 @@ def build_package(package: Package, arch: str, repo_dir: str = None, enable_cros
     target_chroot = setup_build_chroot(arch=arch, extra_packages=package.depends)
     native_chroot = setup_build_chroot(arch=config.runtime['arch'], extra_packages=['base-devel']) if foreign_arch else target_chroot
     cross = foreign_arch and package.mode == 'cross' and enable_crosscompile
-    env = {}
 
     # eliminate target_chroot == native_chroot with set()
     for chroot in set([target_chroot, native_chroot]):
@@ -367,26 +375,33 @@ def build_package(package: Package, arch: str, repo_dir: str = None, enable_cros
         logging.info(f'Cross-compiling {package.path}')
         build_root = native_chroot
         makepkg_compile_opts += ['--nodeps']
-        env = makepkg_env
-
+        env = makepkg_cross_env
+        if enable_ccache:
+            env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
         logging.info('Setting up dependencies for cross-compilation')
-        try_install_packages(package.depends, native_chroot)
+        try_install_packages(package.depends + ['crossdirect', f"{GCC_HOSTSPECS[config.runtime['arch']][arch]}-gcc"], native_chroot)
+        # mount foreign arch chroot inside native chroot
+        chroot_mount_path = os.path.join(native_chroot, 'chroot', os.path.basename(target_chroot))
+        os.makedirs(chroot_mount_path)
+        mount(target_chroot, chroot_mount_path)
     else:
         logging.info(f'Host-compiling {package.path}')
         build_root = target_chroot
         makepkg_compile_opts += ['--syncdeps']
-        env = makepkg_env
+        env = deepcopy(makepkg_env)
+        if enable_ccache:
+            env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
         if not foreign_arch:
             logging.debug('Building for native arch, skipping crossdirect.')
-        elif enable_crossdirect and not package.name in ['crossdirect', 'qemu-user-static-bin', 'binfmt-qemu-static-all-arch']:
+        elif enable_crossdirect and not package.name in CROSSDIRECT_PKGS:
             env['PATH'] = f"/native/usr/lib/crossdirect/{arch}:{env['PATH']}"
             mount_crossdirect(native_chroot=native_chroot, target_chroot=target_chroot, target_arch=arch)
         else:
             logging.debug('Skipping crossdirect.')
 
     src_dir = os.path.join(build_root, 'src')
-    os.makedirs(f'{build_root}/src', exist_ok=True)
-    setup_sources(package, build_root, enable_crosscompile=enable_crosscompile)
+    os.makedirs(src_dir, exist_ok=True)
+    #setup_sources(package, build_root, enable_crosscompile=enable_crosscompile)
 
     result = mount(config.get_path('pkgbuilds'), src_dir)
     if result.returncode != 0:
