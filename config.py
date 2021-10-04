@@ -280,6 +280,9 @@ class ConfigStateHolder:
         paths = self.file['paths']
         return resolve_path_template(paths[path_name], paths)
 
+    def get_package_dir(self, arch: str):
+        return os.path.join(self.get_path('packages'), arch)
+
     def dump(self) -> str:
         dump_toml(self.file)
 

@@ -9,7 +9,7 @@ from joblib import Parallel, delayed
 
 from constants import REPOSITORIES, CROSSDIRECT_PKGS, GCC_HOSTSPECS
 from config import config
-from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect, write_cross_makepkg_conf
+from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect, write_cross_makepkg_conf, mount_packages, mount_pacman_cache
 from distro import get_kupfer_local
 from wrapper import enforce_wrap, check_programs_wrap
 from utils import mount, umount
@@ -98,8 +98,8 @@ class Package:
         return f'package({self.name},{repr(self.names)})'
 
 
-def check_prebuilts(dir: str = None):
-    prebuilts_dir = dir if dir else config.get_path('packages')
+def check_prebuilts(arch: str, dir: str = None):
+    prebuilts_dir = dir if dir else config.get_package_dir(arch)
     os.makedirs(prebuilts_dir, exist_ok=True)
     for repo in REPOSITORIES:
         os.makedirs(os.path.join(prebuilts_dir, repo), exist_ok=True)
@@ -271,10 +271,60 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
     return list([lvl for lvl in dep_levels[::-1] if lvl])
 
 
-def check_package_version_built(package: Package, arch) -> bool:
-    built = True
+def add_file_to_repo(file_path: str, repo_name: str, arch: str):
+    repo_dir = os.path.join(config.get_package_dir(arch), repo_name)
+    pacman_cache_dir = os.path.join(config.get_path('pacman'), arch)
+    file_name = os.path.basename(file_path)
+    target_file = os.path.join(repo_dir, file_name)
 
-    config_path = write_cross_makepkg_conf(native_chroot='/', arch=arch, target_chroot_relative=None, cross=False)
+    os.makedirs(repo_dir, exist_ok=True)
+    if file_path != target_file:
+        logging.debug(f'moving {file_path} to {target_file} ({repo_dir})')
+        shutil.copy(
+            file_path,
+            repo_dir,
+        )
+        os.unlink(file_path)
+
+    # clean up same name package from pacman cache
+    cache_file = os.path.join(pacman_cache_dir, file_name)
+    if os.path.exists(cache_file):
+        os.unlink(cache_file)
+    result = subprocess.run([
+        'repo-add',
+        '--remove',
+        '--prevent-downgrade',
+        os.path.join(
+            repo_dir,
+            f'{repo_name}.db.tar.xz',
+        ),
+        target_file,
+    ])
+    if result.returncode != 0:
+        raise Exception(f'Failed add package {target_file} to repo {repo_name}')
+    for ext in ['db', 'files']:
+        file = os.path.join(repo_dir, f'{repo_name}.{ext}')
+        if os.path.exists(file + '.tar.xz'):
+            os.unlink(file)
+            shutil.copyfile(file + '.tar.xz', file)
+        old = file + '.tar.xz.old'
+        if os.path.exists(old):
+            os.unlink(old)
+
+
+def add_package_to_repo(package: Package, arch: str):
+    logging.info(f'Adding {package.path} to repo {package.repo}')
+    pkgbuild_dir = os.path.join(config.get_path('pkgbuilds'), package.path)
+
+    for file in os.listdir(pkgbuild_dir):
+        # Forced extension by makepkg.conf
+        if file.endswith('.pkg.tar.xz') or file.endswith('.pkg.tar.zst'):
+            return add_file_to_repo(os.path.join(pkgbuild_dir, file), package.repo, arch)
+
+
+def check_package_version_built(package: Package, arch) -> bool:
+
+    config_path = '/' + write_cross_makepkg_conf(native_chroot='/', arch=arch, target_chroot_relative=None, cross=False)
 
     result = subprocess.run(
         makepkg_cmd + [
@@ -289,17 +339,17 @@ def check_package_version_built(package: Package, arch) -> bool:
         capture_output=True,
     )
     if result.returncode != 0:
-        logging.fatal(f'Failed to get package list for {package.path}:' + '\n' + result.stdout.decode() + '\n' + result.stderr.decode())
-        exit(1)
+        raise Exception(f'Failed to get package list for {package.path}:' + '\n' + result.stdout.decode() + '\n' + result.stderr.decode())
 
     for line in result.stdout.decode('utf-8').split('\n'):
         if line != "":
-            file = os.path.join(config.get_path('packages'), package.repo, os.path.basename(line))
+            file = os.path.join(config.get_package_dir(arch), package.repo, os.path.basename(line))
             logging.debug(f'Checking if {file} is built')
-            if not os.path.exists(file):
-                built = False
+            if os.path.exists(file):
+                add_file_to_repo(file, repo_name=package.repo, arch=arch)
+                return True
 
-    return built
+    return False
 
 
 def setup_build_chroot(arch: str, extra_packages=[]) -> str:
@@ -311,6 +361,7 @@ def setup_build_chroot(arch: str, extra_packages=[]) -> str:
         packages=list(set(['base-devel', 'git', 'ccache'] + extra_packages)),
         extra_repos=get_kupfer_local(arch).repos,
     )
+    pacman_cache = mount_pacman_cache(chroot_path, arch)
 
     logging.info(f'Updating chroot {chroot_name}')
     result = subprocess.run(
@@ -328,11 +379,12 @@ def setup_build_chroot(arch: str, extra_packages=[]) -> str:
         logging.fatal(result.stdout)
         logging.fatal(result.stderr)
         raise Exception(f'Failed to update chroot {chroot_name}')
+    umount(pacman_cache)
     return chroot_path
 
 
-def setup_sources(package: Package, chroot: str, arch: str, repo_dir: str = None):
-    repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
+def setup_sources(package: Package, chroot: str, arch: str, pkgbuilds_dir: str = None):
+    pkgbuilds_dir = pkgbuilds_dir if pkgbuilds_dir else config.get_path('pkgbuilds')
     makepkg_setup_args = [
         '--nobuild',
         '--holdver',
@@ -343,7 +395,7 @@ def setup_sources(package: Package, chroot: str, arch: str, repo_dir: str = None
     result = subprocess.run(
         [os.path.join(chroot, 'usr/bin/makepkg')] + makepkg_cmd[1:] + makepkg_setup_args,
         env=makepkg_cross_env | {'PACMAN_CHROOT': chroot},
-        cwd=os.path.join(repo_dir, package.path),
+        cwd=os.path.join(pkgbuilds_dir, package.path),
     )
     if result.returncode != 0:
         raise Exception(f'Failed to check sources for {package.path}')
@@ -366,16 +418,14 @@ def build_package(
     target_chroot = setup_build_chroot(arch=arch, extra_packages=package.depends)
     native_chroot = setup_build_chroot(arch=config.runtime['arch'], extra_packages=['base-devel']) if foreign_arch else target_chroot
     cross = foreign_arch and package.mode == 'cross' and enable_crosscompile
+    umount_dirs = []
+    chroots = set([target_chroot, native_chroot])
 
     # eliminate target_chroot == native_chroot with set()
-    for chroot in set([target_chroot, native_chroot]):
-        pkgs_path = config.get_path('packages')
-        chroot_pkgs = chroot + pkgs_path  # NOTE: DO NOT USE PATH.JOIN, pkgs_path starts with /
-        os.makedirs(chroot_pkgs, exist_ok=True)
-        logging.debug(f'Mounting packages to {chroot_pkgs}')
-        result = mount(pkgs_path, chroot_pkgs)
-        if result.returncode != 0:
-            raise Exception(f'Unable to mount packages to {chroot_pkgs}')
+    for chroot, _arch in [(native_chroot, config.runtime['arch']), (target_chroot, arch)]:
+        logging.debug(f'Mounting packages to {chroot}')
+        dir = mount_packages(chroot, _arch)
+        umount_dirs += [dir]
 
     if cross:
         logging.info(f'Cross-compiling {package.path}')
@@ -386,13 +436,18 @@ def build_package(
         if enable_ccache:
             env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
         logging.info('Setting up dependencies for cross-compilation')
-        try_install_packages(package.depends + ['crossdirect', f"{GCC_HOSTSPECS[config.runtime['arch']][arch]}-gcc"], native_chroot)
+        # include crossdirect for ccache symlinks.
+        results = try_install_packages(package.depends + ['crossdirect', f"{GCC_HOSTSPECS[config.runtime['arch']][arch]}-gcc"], native_chroot)
+        if results['crossdirect'].returncode != 0:
+            raise Exception('Unable to install crossdirect')
         # mount foreign arch chroot inside native chroot
         chroot_relative = os.path.join('chroot', os.path.basename(target_chroot))
         chroot_mount_path = os.path.join(native_chroot, chroot_relative)
-        write_cross_makepkg_conf(native_chroot=native_chroot, arch=arch, target_chroot_relative=chroot_relative)
+        makepkg_relative = write_cross_makepkg_conf(native_chroot=native_chroot, arch=arch, target_chroot_relative=chroot_relative)
+        makepkg_conf_path = os.path.join('/', makepkg_relative)
         os.makedirs(chroot_mount_path)
         mount(target_chroot, chroot_mount_path)
+        umount_dirs += [chroot_mount_path]
     else:
         logging.info(f'Host-compiling {package.path}')
         build_root = target_chroot
@@ -402,9 +457,9 @@ def build_package(
             env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
         if not foreign_arch:
             logging.debug('Building for native arch, skipping crossdirect.')
-        elif enable_crossdirect and not package.name in CROSSDIRECT_PKGS:
+        elif enable_crossdirect and package.name not in CROSSDIRECT_PKGS:
             env['PATH'] = f"/native/usr/lib/crossdirect/{arch}:{env['PATH']}"
-            mount_crossdirect(native_chroot=native_chroot, target_chroot=target_chroot, target_arch=arch)
+            umount_dirs += [mount_crossdirect(native_chroot=native_chroot, target_chroot=target_chroot, target_arch=arch)]
         else:
             logging.debug('Skipping crossdirect.')
 
@@ -414,60 +469,22 @@ def build_package(
 
     result = mount(config.get_path('pkgbuilds'), src_dir)
     if result.returncode != 0:
-        raise Exception(f'Failed to bind mount pkgdirs to {build_root}/src')
+        raise Exception(f'Failed to bind mount pkgbuilds to {build_root}/src')
+    umount_dirs += [src_dir]
 
     makepkg_conf_absolute = os.path.join('/', makepkg_conf_path)
     build_cmd = f'cd /src/{package.path} && makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
+    logging.debug(f'Building: Running {build_cmd}')
     result = run_chroot_cmd(build_cmd, chroot_path=build_root, inner_env=env)
-    umount_result = umount(src_dir)
-    if umount_result != 0:
-        logging.warning(f'Failed to unmount {src_dir}')
+
     if result.returncode != 0:
         raise Exception(f'Failed to compile package {package.path}')
 
-
-def add_package_to_repo(package: Package, arch: str):
-    logging.info(f'Adding {package.path} to repo')
-    binary_dir = os.path.join(config.get_path('packages'), package.repo)
-    pkgbuild_dir = os.path.join(config.get_path('pkgbuilds'), package.path)
-    pacman_cache_dir = os.path.join(config.get_path('pacman'), arch)
-    os.makedirs(binary_dir, exist_ok=True)
-
-    for file in os.listdir(pkgbuild_dir):
-        # Forced extension by makepkg.conf
-        if file.endswith('.pkg.tar.xz') or file.endswith('.pkg.tar.zst'):
-            shutil.move(
-                os.path.join(pkgbuild_dir, file),
-                os.path.join(binary_dir, file),
-            )
-            # clean up same name package from pacman cache
-            cache_file = os.path.join(pacman_cache_dir, file)
-            if os.path.exists(cache_file):
-                os.unlink(cache_file)
-            result = subprocess.run([
-                'repo-add',
-                '--remove',
-                '--new',
-                '--prevent-downgrade',
-                os.path.join(
-                    binary_dir,
-                    f'{package.repo}.db.tar.xz',
-                ),
-                os.path.join(binary_dir, file),
-            ])
-            if result.returncode != 0:
-                logging.fatal(f'Failed add package {package.path} to repo')
-                exit(1)
-    for repo in REPOSITORIES:
-        for ext in ['db', 'files']:
-            if os.path.exists(os.path.join(binary_dir, f'{repo}.{ext}.tar.xz')):
-                os.unlink(os.path.join(binary_dir, f'{repo}.{ext}'))
-                shutil.copyfile(
-                    os.path.join(binary_dir, f'{repo}.{ext}.tar.xz'),
-                    os.path.join(binary_dir, f'{repo}.{ext}'),
-                )
-            if os.path.exists(os.path.join(binary_dir, f'{repo}.{ext}.tar.xz.old')):
-                os.unlink(os.path.join(binary_dir, f'{repo}.{ext}.tar.xz.old'))
+    # cleanup
+    for dir in umount_dirs:
+        umount_result = umount(dir)
+        if umount_result != 0:
+            logging.warning(f'Failed to unmount {dir}')
 
 
 @click.group(name='packages')
@@ -485,7 +502,8 @@ def cmd_build(paths: list[str], force=False, arch=None):
         # arch = config.get_profile()...
         arch = 'aarch64'
 
-    check_prebuilts()
+    for _arch in set([arch, config.runtime['arch']]):
+        check_prebuilts(_arch)
 
     paths = list(paths)
     repo = discover_packages()
@@ -522,7 +540,7 @@ def cmd_build(paths: list[str], force=False, arch=None):
 
 @cmd_packages.command(name='clean')
 def cmd_clean():
-    check_programs_wrap('git')
+    enforce_wrap()
     result = subprocess.run([
         'git',
         'clean',

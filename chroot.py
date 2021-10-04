@@ -139,23 +139,34 @@ def create_chroot_user(
         raise Exception('Failed to setup user')
 
 
-def try_install_packages(packages: list[str], chroot: str) -> dict[str, subprocess.CompletedProcess]:
-    """Try installing packages one by one"""
-    results = {}
-    for pkg in set(packages):
-        # Don't check for errors here because there might be packages that are listed as dependencies but are not available on x86_64
-        results[pkg] = run_chroot_cmd(f'pacman -Syy --noconfirm --needed {pkg}', chroot)
+def try_install_packages(packages: list[str], chroot: str, refresh: bool = False, allow_fail: bool = True) -> dict[str, subprocess.CompletedProcess]:
+    """Try installing packages, fall back to installing one by one"""
+    if refresh:
+        run_chroot_cmd('pacman -Syy --noconfirm', chroot)
+    cmd = 'pacman -S --noconfirm --needed'
+    result = run_chroot_cmd(f'{cmd} {" ".join(packages)}', chroot)
+    results = {package: result for package in packages}
+    if result.returncode != 0 and allow_fail:
+        results = {}
+        logging.debug('Falling back to serial installation')
+        for pkg in set(packages):
+            # Don't check for errors here because there might be packages that are listed as dependencies but are not available on x86_64
+            results[pkg] = run_chroot_cmd(f'{cmd} {pkg}', chroot)
     return results
 
 
 def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, host_arch: str = None):
+    """
+    mount `native_chroot` at `target_chroot`/native
+    returns the absolute path that `native_chroot` has been mounted at.
+    """
     if host_arch is None:
         host_arch = config.runtime['arch']
     gcc = f'{GCC_HOSTSPECS[host_arch][target_arch]}-gcc'
 
     native_mount = os.path.join(target_chroot, 'native')
     logging.debug(f'Activating crossdirect in {native_mount}')
-    results = try_install_packages(CROSSDIRECT_PKGS + [gcc], native_chroot)
+    results = try_install_packages(CROSSDIRECT_PKGS + [gcc], native_chroot, refresh=True, allow_fail=False)
     if results[gcc].returncode != 0:
         logging.debug('Failed to install cross-compiler package {gcc}')
     if results['crossdirect'].returncode != 0:
@@ -170,18 +181,45 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
     result = mount(native_chroot, native_mount)
     if result.returncode != 0:
         raise Exception(f'Failed to mount native chroot {native_chroot} to {native_mount}')
+    return native_mount
+
+
+def mount_relative(chroot_path: str, absolute_source: str, relative_target: str) -> tuple[subprocess.CompletedProcess, str]:
+    """returns the absolute path `relative_target` was mounted at"""
+    target = os.path.join(chroot_path, relative_target.lstrip('/'))
+    os.makedirs(target, exist_ok=True)
+    result = mount(absolute_source, target)
+    return result, target
+
+
+def mount_pacman_cache(chroot_path: str, arch: str) -> str:
+    global_cache = os.path.join(config.get_path('pacman'), arch)
+    relative = os.path.join('var', 'cache', 'pacman', arch)
+    result, absolute = mount_relative(chroot_path, global_cache, relative)
+    if result.returncode != 0:
+        raise Exception(f'Failed to mount {global_cache} to {absolute}')
+    return absolute
+
+
+def mount_packages(chroot_path, arch) -> str:
+    packages = config.get_package_dir(arch)
+    result, absolute = mount_relative(chroot_path, absolute_source=packages, relative_target=packages.lstrip('/'))
+    if result.returncode != 0:
+        raise Exception(f'Failed to mount {packages} to {absolute}: {result.returncode}')
+    return absolute
 
 
 def write_cross_makepkg_conf(native_chroot: str, arch: str, target_chroot_relative: str, cross: bool = True) -> str:
     """
     Generate a makepkg_cross_$arch.conf file in `native_chroot`/etc, building for `target_chroot_relative`
-    Returns the absolute (host) path to the makepkg config file.
+    Returns the relative (to `native_chroot`) path to written file, e.g. `etc/makepkg_cross_aarch64.conf`.
     """
     makepkg_cross_conf = generate_makepkg_conf(arch, cross=cross, chroot=target_chroot_relative)
-    makepkg_conf_path = os.path.join(native_chroot, 'etc', f'makepkg_cross_{arch}.conf')
+    makepkg_conf_path_relative = os.path.join('etc', f'makepkg_cross_{arch}.conf')
+    makepkg_conf_path = os.path.join(native_chroot, makepkg_conf_path_relative)
     with open(makepkg_conf_path, 'w') as f:
         f.write(makepkg_cross_conf)
-    return makepkg_conf_path
+    return makepkg_conf_path_relative
 
 
 @click.command('chroot')
@@ -226,5 +264,5 @@ def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
             mount_crossdirect(native_chroot=native_chroot, target_chroot=chroot_path, target_arch=arch)
 
     cmd = ['arch-chroot', chroot_path, '/bin/bash']
-    logging.debug('Starting chroot: ' + repr(cmd))
+    logging.debug('Starting chroot shell: ' + repr(cmd))
     subprocess.call(cmd)

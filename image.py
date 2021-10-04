@@ -161,7 +161,7 @@ def cmd_build():
     rootfs_mount = get_chroot_path(chroot_name)
     mount_rootfs_image(image_name, rootfs_mount)
 
-    packages_dir = config.get_path('packages')
+    packages_dir = config.get_packages(arch)
     if os.path.exists(os.path.join(packages_dir, 'main')):
         extra_repos = get_kupfer_local(arch).repos
     else:

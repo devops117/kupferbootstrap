@@ -33,13 +33,13 @@ def mount(src: str, dest: str, options=['bind'], type=None) -> subprocess.Comple
     if type:
         type = ['-t', type]
 
-    result = subprocess.run(['mount'] + type + opts + [
-        src,
-        dest,
-    ])
-    if result.returncode == 0:
-        atexit.register(umount, dest)
-    return result
+    result = subprocess.run(
+        ['mount'] + type + opts + [
+            src,
+            dest,
+        ],
+        capture_output=False,
+    )
     if result.returncode == 0:
         atexit.register(umount, dest)
     return result

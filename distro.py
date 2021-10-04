@@ -201,4 +201,4 @@ def get_kupfer_https(arch: str) -> Distro:
 
 
 def get_kupfer_local(arch: str) -> Distro:
-    return get_kupfer(arch, f"file://{config.get_path('packages')}/$repo")
+    return get_kupfer(arch, f"file://{config.get_path('packages')}/$arch/$repo")
