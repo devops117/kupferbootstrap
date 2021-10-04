@@ -4,14 +4,16 @@ import multiprocessing
 import os
 import shutil
 import subprocess
+from copy import deepcopy
+from joblib import Parallel, delayed
+
 from constants import REPOSITORIES, CROSSDIRECT_PKGS, GCC_HOSTSPECS
 from config import config
 from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect
-from joblib import Parallel, delayed
 from distro import get_kupfer_local
 from wrapper import enforce_wrap, check_programs_wrap
 from utils import mount, umount
-from copy import deepcopy
+from generator import generate_makepkg_conf
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
@@ -355,6 +357,7 @@ def build_package(
     makepkg_compile_opts = [
         '--holdver',
     ]
+    makepkg_conf_path = 'etc/makepkg.conf'
     repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
     foreign_arch = config.runtime['arch'] != arch
     target_chroot = setup_build_chroot(arch=arch, extra_packages=package.depends)
@@ -375,13 +378,19 @@ def build_package(
         logging.info(f'Cross-compiling {package.path}')
         build_root = native_chroot
         makepkg_compile_opts += ['--nodeps']
-        env = makepkg_cross_env
+        #env = makepkg_cross_env
+        env = makepkg_env
         if enable_ccache:
             env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
         logging.info('Setting up dependencies for cross-compilation')
         try_install_packages(package.depends + ['crossdirect', f"{GCC_HOSTSPECS[config.runtime['arch']][arch]}-gcc"], native_chroot)
         # mount foreign arch chroot inside native chroot
-        chroot_mount_path = os.path.join(native_chroot, 'chroot', os.path.basename(target_chroot))
+        chroot_relative = os.path.join('chroot', os.path.basename(target_chroot))
+        chroot_mount_path = os.path.join(native_chroot, chroot_relative)
+        makepkg_cross_conf = generate_makepkg_conf(arch, cross=True, chroot=chroot_relative)
+        makepkg_conf_path = os.path.join('etc', f'makepkg_cross_{arch}.conf')
+        with open(os.path.join(native_chroot, makepkg_conf_path), 'w') as f:
+            f.write(makepkg_cross_conf)
         os.makedirs(chroot_mount_path)
         mount(target_chroot, chroot_mount_path)
     else:
@@ -407,7 +416,8 @@ def build_package(
     if result.returncode != 0:
         raise Exception(f'Failed to bind mount pkgdirs to {build_root}/src')
 
-    build_cmd = f'cd /src/{package.path} && echo $PATH && makepkg --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
+    makepkg_conf_absolute = os.path.join('/', makepkg_conf_path)
+    build_cmd = f'cd /src/{package.path} && makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
     result = run_chroot_cmd(build_cmd, chroot_path=build_root, inner_env=env)
     umount_result = umount(src_dir)
     if umount_result != 0:

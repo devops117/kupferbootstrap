@@ -78,6 +78,11 @@ KUPFER_HTTPS = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
 
 DistroArch = TargetArch = Arch
 
+COMPILE_ARCHES: dict[Arch, str] = {
+    'x86_64': 'amd64',
+    'aarch64': 'arm64',
+}
+
 GCC_HOSTSPECS: dict[DistroArch, dict[TargetArch, str]] = {
     'x86_64': {
         'x86_64': 'x86_64-pc-linux-gnu',
@@ -86,6 +91,19 @@ GCC_HOSTSPECS: dict[DistroArch, dict[TargetArch, str]] = {
     'aarch64': {
         'aarch64': 'aarch64-unknown-linux-gnu',
     }
+}
+
+CFLAGS_GENERAL = ['-O2', '-pipe', '-fstack-protector-strong']
+CFLAGS_ARCHES: dict[Arch, list[str]] = {
+    'x86_64': ['-march=x86-64', '-mtune=generic'],
+    'aarch64': [
+        '-march=armv8-a',
+        '-fexceptions',
+        '-Wp,-D_FORTIFY_SOURCE=2',
+        '-Wformat',
+        '-Werror=format-security',
+        '-fstack-clash-protection',
+    ]
 }
 
 CROSSDIRECT_PKGS = ['crossdirect', 'qemu-user-static-bin', 'binfmt-qemu-static']
