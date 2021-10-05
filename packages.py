@@ -7,7 +7,7 @@ import subprocess
 from copy import deepcopy
 from joblib import Parallel, delayed
 
-from constants import REPOSITORIES, CROSSDIRECT_PKGS, GCC_HOSTSPECS
+from constants import REPOSITORIES, CROSSDIRECT_PKGS, GCC_HOSTSPECS, ARCHES
 from config import config
 from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect, write_cross_makepkg_conf, mount_packages, mount_pacman_cache
 from distro import get_kupfer_local
@@ -501,6 +501,9 @@ def cmd_build(paths: list[str], force=False, arch=None):
     if arch is None:
         # arch = config.get_profile()...
         arch = 'aarch64'
+
+    if arch not in ARCHES:
+        raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
 
     for _arch in set([arch, config.runtime['arch']]):
         check_prebuilts(_arch)
