@@ -319,7 +319,7 @@ def add_package_to_repo(package: Package, arch: str):
     for file in os.listdir(pkgbuild_dir):
         # Forced extension by makepkg.conf
         if file.endswith('.pkg.tar.xz') or file.endswith('.pkg.tar.zst'):
-            return add_file_to_repo(os.path.join(pkgbuild_dir, file), package.repo, arch)
+            add_file_to_repo(os.path.join(pkgbuild_dir, file), package.repo, arch)
 
 
 def check_package_version_built(package: Package, arch) -> bool:

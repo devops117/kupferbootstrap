@@ -174,7 +174,7 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
 
     os.makedirs(native_mount, exist_ok=True)
 
-    ld_so = glob(f"{os.path.join('native_chroot', 'usr', 'lib', 'ld-linux-')}*")[0]
+    ld_so = glob(f"{os.path.join(native_chroot, 'usr', 'lib', 'ld-linux-')}*")[0]
     copy(ld_so, os.path.join(target_chroot, 'usr', 'lib'))
 
     logging.debug(f'Mounting {native_chroot} to {native_mount}')
