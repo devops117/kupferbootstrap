@@ -415,7 +415,7 @@ def build_package(
     makepkg_conf_path = 'etc/makepkg.conf'
     repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
     foreign_arch = config.runtime['arch'] != arch
-    target_chroot = setup_build_chroot(arch=arch, extra_packages=package.depends)
+    target_chroot = setup_build_chroot(arch=arch, extra_packages=(list(set(package.depends) - set(package.names))))
     native_chroot = setup_build_chroot(arch=config.runtime['arch'], extra_packages=['base-devel']) if foreign_arch else target_chroot
     cross = foreign_arch and package.mode == 'cross' and enable_crosscompile
     umount_dirs = []
