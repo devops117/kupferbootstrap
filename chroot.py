@@ -162,7 +162,9 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
     """
     if host_arch is None:
         host_arch = config.runtime['arch']
-    gcc = f'{GCC_HOSTSPECS[host_arch][target_arch]}-gcc'
+    hostspec = GCC_HOSTSPECS[host_arch][target_arch]
+    cc = f'{hostspec}-cc'
+    gcc = f'{hostspec}-gcc'
 
     native_mount = os.path.join(target_chroot, 'native')
     logging.debug(f'Activating crossdirect in {native_mount}')
@@ -172,11 +174,21 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
     if results['crossdirect'].returncode != 0:
         raise Exception('Failed to install crossdirect')
 
+    cc_path = os.path.join(native_chroot, 'usr', 'bin', cc)
+    target_lib_dir = os.path.join(target_chroot, 'lib64')
+
+    for target, source in {cc_path: gcc, target_lib_dir: 'lib'}.items():
+        if not os.path.exists(target):
+            logging.debug(f'Symlinking {source} at {target}')
+            os.symlink(source, target)
+    ld_so = os.path.basename(glob(f"{os.path.join(native_chroot, 'usr', 'lib', 'ld-linux-')}*")[0])
+    ld_so_target = os.path.join(target_lib_dir, ld_so)
+    if not os.path.islink(ld_so_target):
+        os.symlink(os.path.join('/native', 'usr', 'lib', ld_so), ld_so_target)
+    else:
+        logging.debug('ld-linux.so symlink already exists, skipping for {target_chroot}')
+
     os.makedirs(native_mount, exist_ok=True)
-
-    ld_so = glob(f"{os.path.join(native_chroot, 'usr', 'lib', 'ld-linux-')}*")[0]
-    copy(ld_so, os.path.join(target_chroot, 'usr', 'lib'))
-
     logging.debug(f'Mounting {native_chroot} to {native_mount}')
     result = mount(native_chroot, native_mount)
     if result.returncode != 0:

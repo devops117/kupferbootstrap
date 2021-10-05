@@ -358,7 +358,7 @@ def setup_build_chroot(arch: str, extra_packages=[]) -> str:
     chroot_path = create_chroot(
         chroot_name,
         arch=arch,
-        packages=list(set(['base-devel', 'git', 'ccache'] + extra_packages)),
+        packages=list(set(['base-devel', 'git'] + extra_packages)),
         extra_repos=get_kupfer_local(arch).repos,
     )
     pacman_cache = mount_pacman_cache(chroot_path, arch)
