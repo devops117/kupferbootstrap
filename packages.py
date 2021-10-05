@@ -497,13 +497,13 @@ def cmd_packages():
 @click.option('--arch', default=None)
 @click.argument('paths', nargs=-1)
 def cmd_build(paths: list[str], force=False, arch=None):
-    enforce_wrap()
     if arch is None:
         # arch = config.get_profile()...
         arch = 'aarch64'
 
     if arch not in ARCHES:
         raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
+    enforce_wrap()
 
     for _arch in set([arch, config.runtime['arch']]):
         check_prebuilts(_arch)

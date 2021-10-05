@@ -34,10 +34,13 @@ def cli(verbose: bool = False, config_file: str = None, no_wrapper: bool = False
 def main():
     try:
         return cli(prog_name='kupferbootstrap')
-    except Exception:
-        logging.fatal(get_trace())
-        logging.info('Starting error shell. Type exit to quit.')
+    except Exception as ex:
+        if config.runtime['verbose']:
+            logging.fatal(get_trace())
+        else:
+            logging.fatal(ex)
         if config.runtime['error_shell']:
+            logging.info('Starting error shell. Type exit to quit.')
             subprocess.call('/bin/bash')
         exit(1)
 
