@@ -422,7 +422,7 @@ def build_package(
     set([target_chroot, native_chroot])
 
     # eliminate target_chroot == native_chroot with set()
-    for chroot, _arch in [(native_chroot, config.runtime['arch']), (target_chroot, arch)]:
+    for chroot, _arch in set([(native_chroot, config.runtime['arch']), (target_chroot, arch)]):
         logging.debug(f'Mounting packages to {chroot}')
         dir = mount_packages(chroot, _arch)
         umount_dirs += [dir]
@@ -453,15 +453,14 @@ def build_package(
         build_root = target_chroot
         makepkg_compile_opts += ['--syncdeps']
         env = deepcopy(makepkg_env)
-        if enable_ccache:
-            env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
-        if not foreign_arch:
-            logging.debug('Building for native arch, skipping crossdirect.')
-        elif enable_crossdirect and package.name not in CROSSDIRECT_PKGS:
+        if foreign_arch and enable_crossdirect and package.name not in CROSSDIRECT_PKGS:
             env['PATH'] = f"/native/usr/lib/crossdirect/{arch}:{env['PATH']}"
             umount_dirs += [mount_crossdirect(native_chroot=native_chroot, target_chroot=target_chroot, target_arch=arch)]
         else:
-            logging.debug('Skipping crossdirect.')
+            if enable_ccache:
+                logging.debug('ccache enabled')
+                env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
+            logging.debug(('Building for native arch. ' if not foreign_arch else '') + 'Skipping crossdirect.')
 
     src_dir = os.path.join(build_root, 'src')
     os.makedirs(src_dir, exist_ok=True)
@@ -535,9 +534,14 @@ def cmd_build(paths: list[str], force=False, arch=None):
         return
     for level, need_build in enumerate(build_levels):
         logging.info(f"(Level {level}) Building {', '.join([x.name for x in need_build])}")
-        crosscompile = config.file['build']['crosscompile']
         for package in need_build:
-            build_package(package, arch=arch, enable_crosscompile=crosscompile)
+            build_package(
+                package,
+                arch=arch,
+                enable_crosscompile=config.file['build']['crosscompile'],
+                enable_crossdirect=config.file['build']['crossdirect'],
+                enable_ccache=config.file['build']['ccache'],
+            )
             add_package_to_repo(package, arch)
 
 

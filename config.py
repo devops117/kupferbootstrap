@@ -25,6 +25,7 @@ PROFILE_DEFAULTS: Profile = {
 
 CONFIG_DEFAULTS = {
     'build': {
+        'ccache': True,
         'crosscompile': True,
         'crossdirect': True,
         'threads': 0,
