@@ -22,7 +22,7 @@ def get_chroot_path(chroot_name, override_basepath: str = None) -> str:
 
 def create_chroot(chroot_name: str,
                   arch: str,
-                  packages: list[str] = ['base'],
+                  packages: list[str] = ['base', 'base-devel', 'git'],
                   extra_repos: dict[str, RepoInfo] = {},
                   chroot_base_path: str = None,
                   bind_mounts: dict[str, str] = BIND_BUILD_DIRS):
@@ -261,7 +261,6 @@ def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
             create_chroot(
                 chroot_name,
                 arch=arch,
-                packages=['base-devel', 'git'],
                 extra_repos=get_kupfer_local(arch).repos,
             )
         if type == 'build' and config.file['build']['crossdirect']:
@@ -269,7 +268,7 @@ def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
             native_chroot = create_chroot(
                 'build_' + native_arch,
                 native_arch,
-                packages=['base-devel'] + (CROSSDIRECT_PKGS if enable_crossdirect else []),
+                packages=['base', 'base-devel', 'git'] + (CROSSDIRECT_PKGS if enable_crossdirect else []),
                 extra_repos=get_kupfer_local(native_arch).repos,
             )
             mount_crossdirect(native_chroot=native_chroot, target_chroot=chroot_path, target_arch=arch)
