@@ -13,7 +13,6 @@ DOCKER_PATHS = {
     'jumpdrive': '/var/cache/jumpdrive',
     'pacman': '/var/cache/pacman',
     'packages': '/prebuilts',
-    'pkgbuilds': '/src',
 }
 
 
