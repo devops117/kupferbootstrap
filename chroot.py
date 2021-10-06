@@ -5,7 +5,6 @@ import os
 from config import config
 from distro import get_base_distros, RepoInfo
 from shlex import quote as shell_quote
-from shutil import copy
 from utils import mount
 from distro import get_kupfer_local
 from wrapper import enforce_wrap

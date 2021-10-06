@@ -11,7 +11,7 @@ from constants import REPOSITORIES, CROSSDIRECT_PKGS, GCC_HOSTSPECS, ARCHES
 from config import config
 from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect, write_cross_makepkg_conf, mount_packages, mount_pacman_cache
 from distro import get_kupfer_local
-from wrapper import enforce_wrap, check_programs_wrap
+from wrapper import enforce_wrap
 from utils import mount, umount
 
 makepkg_env = os.environ.copy() | {
@@ -419,7 +419,7 @@ def build_package(
     native_chroot = setup_build_chroot(arch=config.runtime['arch'], extra_packages=['base-devel']) if foreign_arch else target_chroot
     cross = foreign_arch and package.mode == 'cross' and enable_crosscompile
     umount_dirs = []
-    chroots = set([target_chroot, native_chroot])
+    set([target_chroot, native_chroot])
 
     # eliminate target_chroot == native_chroot with set()
     for chroot, _arch in [(native_chroot, config.runtime['arch']), (target_chroot, arch)]:
