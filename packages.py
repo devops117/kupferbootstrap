@@ -557,7 +557,6 @@ def cmd_clean():
 @cmd_packages.command(name='check')
 @click.argument('paths', nargs=-1)
 def cmd_check(paths):
-    enforce_wrap()
     paths = list(paths)
     packages = filter_packages_by_paths(discover_packages(), paths)
 
@@ -568,9 +567,14 @@ def cmd_check(paths):
         if name.endswith('-git'):
             is_git_package = True
 
+        required_arches = ''
+        provided_arches = []
+
         mode_key = '_mode'
         pkgbase_key = 'pkgbase'
         pkgname_key = 'pkgname'
+        arches_key = '_arches'
+        arch_key = 'arch'
         commit_key = '_commit'
         source_key = 'source'
         sha256sums_key = 'sha256sums'
@@ -581,7 +585,8 @@ def cmd_check(paths):
             'pkgdesc': False,
             'pkgver': True,
             'pkgrel': True,
-            'arch': True,
+            arches_key: True,
+            arch_key: True,
             'license': True,
             'url': False,
             'provides': is_git_package,
@@ -598,9 +603,13 @@ def cmd_check(paths):
         }
 
         with open(os.path.join(package.path, 'PKGBUILD'), 'r') as file:
-            lines = file.read().split('\n')
+            content = file.read()
+            if '\t' in content:
+                logging.fatal(f'\\t is not allowed in {os.path.join(package.path, "PKGBUILD")}')
+                exit(1)
+            lines = content.split('\n')
             if len(lines) == 0:
-                logging.fatal(f'Empty PKGBUILD for {package.path}')
+                logging.fatal(f'Empty {os.path.join(package.path, "PKGBUILD")}')
                 exit(1)
             line_index = 0
             key_index = 0
@@ -613,7 +622,7 @@ def cmd_check(paths):
                     line_index += 1
                     continue
 
-                if line.startswith('_') and not line.startswith(mode_key) and not line.startswith(commit_key):
+                if line.startswith('_') and not line.startswith(mode_key) and not line.startswith(arches_key) and not line.startswith(commit_key):
                     line_index += 1
                     continue
 
@@ -652,6 +661,9 @@ def cmd_check(paths):
                     if missing_prefix:
                         formatted = False
                         reason = f'Package name needs to have "{package.repo}-" as prefix'
+
+                if key == arches_key:
+                    required_arches = line.split('=')[1]
 
                 if line.endswith('=('):
                     hold_key = True
@@ -692,9 +704,25 @@ def cmd_check(paths):
                         logging.fatal(reason)
                     exit(1)
 
+                if key == arch_key:
+                    if line.endswith(')'):
+                        if line.startswith(f'{arch_key}=('):
+                            check_arches_hint(os.path.join(package.path, "PKGBUILD"), required_arches, [line[6:-1]])
+                        else:
+                            check_arches_hint(os.path.join(package.path, "PKGBUILD"), required_arches, provided_arches)
+                    elif line.startswith('    '):
+                        provided_arches.append(line[4:])
+
                 if next_key and not hold_key:
                     key_index += 1
                 if next_line:
                     line_index += 1
 
         logging.info(f'{package.path} nicely formatted!')
+
+
+def check_arches_hint(path: str, required: str, provided: list[str]):
+    if required == 'all':
+        for arch in ARCHES:
+            if arch not in provided:
+                logging.warning(f'Missing {arch} in arches list in {path}, because hint is `all`')
