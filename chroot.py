@@ -175,8 +175,10 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
 
     cc_path = os.path.join(native_chroot, 'usr', 'bin', cc)
     target_lib_dir = os.path.join(target_chroot, 'lib64')
+    # TODO: crosscompiler weirdness, find proper fix for /include instead of /usr/include
+    target_include_dir = os.path.join(target_chroot, 'include')
 
-    for target, source in {cc_path: gcc, target_lib_dir: 'lib'}.items():
+    for target, source in {cc_path: gcc, target_lib_dir: 'lib', target_include_dir: 'usr/include'}.items():
         if not os.path.exists(target):
             logging.debug(f'Symlinking {source} at {target}')
             os.symlink(source, target)
