@@ -161,7 +161,7 @@ def cmd_build():
     rootfs_mount = get_chroot_path(chroot_name)
     mount_rootfs_image(image_name, rootfs_mount)
 
-    packages_dir = config.get_packages(arch)
+    packages_dir = config.get_package_dir(arch)
     if os.path.exists(os.path.join(packages_dir, 'main')):
         extra_repos = get_kupfer_local(arch).repos
     else:
@@ -169,12 +169,17 @@ def cmd_build():
     packages = ['base', 'base-kupfer'] + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
     create_chroot(
         chroot_name,
+        arch=arch,
         packages=packages,
-        pacman_conf=os.path.join(config.runtime['script_source_dir'], 'local/etc/pacman.conf'),
         extra_repos=extra_repos,
         bind_mounts={},
+        chroot_base_path='/chroot',
     )
-    create_chroot_user(chroot_name, user=profile['username'], password=profile['password'])
+    create_chroot_user(
+        rootfs_mount,
+        user=profile['username'],
+        password=profile['password'],
+    )
     if post_cmds:
         result = run_chroot_cmd(' && '.join(post_cmds), chroot_name)
         if result.returncode != 0:
