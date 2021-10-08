@@ -207,6 +207,8 @@ def mount_relative(chroot_path: str, absolute_source: str, relative_target: str)
 
 def mount_pacman_cache(chroot_path: str, arch: str) -> str:
     global_cache = os.path.join(config.get_path('pacman'), arch)
+    if not os.path.exists(global_cache):
+        os.makedirs(global_cache)
     relative = os.path.join('var', 'cache', 'pacman', arch)
     result, absolute = mount_relative(chroot_path, global_cache, relative)
     if result.returncode != 0:
