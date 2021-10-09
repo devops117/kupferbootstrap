@@ -49,7 +49,8 @@ CONFIG_RUNTIME_DEFAULTS = {
     'config_file': None,
     'arch': None,
     'no_wrap': False,
-    'script_source_dir': os.path.dirname(os.path.realpath(__file__))
+    'script_source_dir': os.path.dirname(os.path.realpath(__file__)),
+    'error_shell': False,
 }
 
 
@@ -117,12 +118,12 @@ def resolve_profile(
     return resolved
 
 
-def sanitize_config(conf: dict, warn_missing_defaultprofile=True) -> dict:
+def sanitize_config(conf: dict[str, dict], warn_missing_defaultprofile=True) -> dict[str, dict]:
     """checks the input config dict for unknown keys and returns only the known parts"""
     return merge_configs(conf_new=conf, conf_base={}, warn_missing_defaultprofile=warn_missing_defaultprofile)
 
 
-def merge_configs(conf_new: dict, conf_base={}, warn_missing_defaultprofile=True) -> dict:
+def merge_configs(conf_new: dict[str, dict], conf_base={}, warn_missing_defaultprofile=True) -> dict[str, dict]:
     """
     Returns `conf_new` semantically merged into `conf_base`, after validating
     `conf_new` keys against `CONFIG_DEFAULTS` and `PROFILE_DEFAULTS`.
