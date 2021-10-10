@@ -26,7 +26,7 @@ def resize_fs(image_path: str, shrink: bool = False):
         else:
             logging.warning(msg)
 
-    result = subprocess.run(['resize2fs'] + (['-MP'] if shrink else []) + [image_path])
+    result = subprocess.run(['resize2fs'] + (['-M'] if shrink else []) + [image_path])
     if result.returncode != 0:
         raise Exception(f'Failed to resize2fs {image_path}')
 
