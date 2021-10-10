@@ -681,9 +681,9 @@ def cmd_check(paths):
                     formatted = False
                     reason = 'Multiline variables should be indented with 4 spaces'
 
-                if '"' in line and '$' not in line and ' ' not in line:
+                if '"' in line and '$' not in line and ' ' not in line and ';' not in line:
                     formatted = False
-                    reason = 'Found literal " although no "$" or " " was found in the line justifying the usage of a literal "'
+                    reason = 'Found literal " although no "$", " " or ";" was found in the line justifying the usage of a literal "'
 
                 if '\'' in line:
                     formatted = False
