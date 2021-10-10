@@ -590,8 +590,7 @@ def cmd_build(paths: list[str], force=False, arch=None):
             enable_ccache=False,
         )
         for pkg in CROSSDIRECT_PKGS:
-            # do not add --needed so we reinstall qemu+binfmt always in order to register the binfmt handler
-            subprocess.run(['pacman', '-Syy', pkg, '--noconfirm'])
+            subprocess.run(['pacman', '-Syy', pkg, '--noconfirm', '--needed'])
         binfmt_register(arch)
 
     build_packages_by_paths(
