@@ -43,6 +43,7 @@ FLAVOURS = {
 
 REPOSITORIES = [
     'boot',
+    'cross',
     'device',
     'firmware',
     'linux',
