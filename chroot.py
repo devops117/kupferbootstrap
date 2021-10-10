@@ -189,6 +189,10 @@ def mount_crossdirect(native_chroot: str, target_chroot: str, target_arch: str, 
     else:
         logging.debug('ld-linux.so symlink already exists, skipping for {target_chroot}')
 
+    # TODO: find proper fix
+    logging.debug('Disabling crossdirect rustc')
+    os.unlink(os.path.join(native_chroot, 'usr/lib/crossdirect', target_arch, 'rustc'))
+
     os.makedirs(native_mount, exist_ok=True)
     logging.debug(f'Mounting {native_chroot} to {native_mount}')
     result = mount(native_chroot, native_mount)
