@@ -341,15 +341,17 @@ def check_package_version_built(package: Package, arch) -> bool:
     if result.returncode != 0:
         raise Exception(f'Failed to get package list for {package.path}:' + '\n' + result.stdout.decode() + '\n' + result.stderr.decode())
 
+    missing = False
     for line in result.stdout.decode('utf-8').split('\n'):
         if line != "":
             file = os.path.join(config.get_package_dir(arch), package.repo, os.path.basename(line))
             logging.debug(f'Checking if {file} is built')
             if os.path.exists(file):
                 add_file_to_repo(file, repo_name=package.repo, arch=arch)
-                return True
+            else:
+                missing = True
 
-    return False
+    return not missing
 
 
 def setup_build_chroot(arch: str, extra_packages=[]) -> str:
