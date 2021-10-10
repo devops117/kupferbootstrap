@@ -23,18 +23,16 @@ def umount(dest):
     )
 
 
-def mount(src: str, dest: str, options=['bind'], type=None) -> subprocess.CompletedProcess:
+def mount(src: str, dest: str, options=['bind'], fs_type=None) -> subprocess.CompletedProcess:
     opts = []
-    type = []
-
     for opt in options:
         opts += ['-o', opt]
 
-    if type:
-        type = ['-t', type]
+    if fs_type:
+        opts += ['-t', fs_type]
 
     result = subprocess.run(
-        ['mount'] + type + opts + [
+        ['mount'] + opts + [
             src,
             dest,
         ],

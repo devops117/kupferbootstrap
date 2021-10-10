@@ -13,6 +13,7 @@ from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_cr
 from distro import get_kupfer_local
 from wrapper import enforce_wrap
 from utils import mount, umount
+from binfmt import register as binfmt_register
 
 makepkg_env = os.environ.copy() | {
     'LANG': 'C',
@@ -98,7 +99,8 @@ class Package:
         return f'package({self.name},{repr(self.names)})'
 
 
-def check_prebuilts(arch: str, dir: str = None):
+def init_prebuilts(arch: str, dir: str = None):
+    """Ensure that all `constants.REPOSITORIES` inside `dir` exist"""
     prebuilts_dir = dir if dir else config.get_package_dir(arch)
     os.makedirs(prebuilts_dir, exist_ok=True)
     for repo in REPOSITORIES:
@@ -409,16 +411,18 @@ def build_package(
     repo_dir: str = None,
     enable_crosscompile: bool = True,
     enable_crossdirect: bool = True,
-    enable_ccache=True,
+    enable_ccache: bool = True,
 ):
-    makepkg_compile_opts = [
-        '--holdver',
-    ]
+    makepkg_compile_opts = ['--holdver']
     makepkg_conf_path = 'etc/makepkg.conf'
     repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
     foreign_arch = config.runtime['arch'] != arch
     target_chroot = setup_build_chroot(arch=arch, extra_packages=(list(set(package.depends) - set(package.names))))
-    native_chroot = setup_build_chroot(arch=config.runtime['arch'], extra_packages=['base-devel']) if foreign_arch else target_chroot
+    native_chroot = target_chroot if not foreign_arch else setup_build_chroot(
+        arch=config.runtime['arch'],
+        extra_packages=['base-devel'] + CROSSDIRECT_PKGS,
+    )
+
     cross = foreign_arch and package.mode == 'cross' and enable_crosscompile
     umount_dirs = []
     set([target_chroot, native_chroot])
@@ -438,8 +442,8 @@ def build_package(
         if enable_ccache:
             env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
         logging.info('Setting up dependencies for cross-compilation')
-        # include crossdirect for ccache symlinks.
-        results = try_install_packages(package.depends + ['crossdirect', f"{GCC_HOSTSPECS[config.runtime['arch']][arch]}-gcc"], native_chroot)
+        # include crossdirect for ccache symlinks and qemu-user
+        results = try_install_packages(package.depends + CROSSDIRECT_PKGS + [f"{GCC_HOSTSPECS[config.runtime['arch']][arch]}-gcc"], native_chroot)
         if results['crossdirect'].returncode != 0:
             raise Exception('Unable to install crossdirect')
         # mount foreign arch chroot inside native chroot
@@ -488,6 +492,78 @@ def build_package(
             logging.warning(f'Failed to unmount {dir}')
 
 
+def get_unbuilt_package_levels(repo: dict[str, Package], packages: list[Package], arch: str, force: bool = False) -> list[set[Package]]:
+    package_levels = generate_dependency_chain(repo, packages)
+    build_names = set[str]()
+    build_levels = list[set[Package]]()
+    i = 0
+    for level_packages in package_levels:
+        level = set[Package]()
+        for package in level_packages:
+            if ((not check_package_version_built(package, arch)) or set.intersection(set(package.depends), set(build_names)) or
+                (force and package in packages)):
+                level.add(package)
+                build_names.update(package.names)
+        if level:
+            build_levels.append(level)
+            logging.debug(f'Adding to level {i}:' + '\n' + ('\n'.join([p.name for p in level])))
+            i += 1
+    return build_levels
+
+
+def build_packages(
+    repo: dict[str, Package],
+    packages: list[Package],
+    arch: str,
+    force: bool = False,
+    enable_crosscompile: bool = True,
+    enable_crossdirect: bool = True,
+    enable_ccache: bool = True,
+):
+    build_levels = get_unbuilt_package_levels(repo, packages, arch, force=force)
+
+    if not build_levels:
+        logging.info('Everything built already')
+        return
+    for level, need_build in enumerate(build_levels):
+        logging.info(f"(Level {level}) Building {', '.join([x.name for x in need_build])}")
+        for package in need_build:
+            build_package(
+                package,
+                arch=arch,
+                enable_crosscompile=enable_crosscompile,
+                enable_crossdirect=enable_crossdirect,
+                enable_ccache=enable_ccache,
+            )
+            add_package_to_repo(package, arch)
+
+
+def build_packages_by_paths(
+    paths: list[str],
+    arch: str,
+    force=False,
+    enable_crosscompile: bool = True,
+    enable_crossdirect: bool = True,
+    enable_ccache: bool = True,
+):
+    if isinstance(paths, str):
+        paths = [paths]
+
+    for _arch in set([arch, config.runtime['arch']]):
+        init_prebuilts(_arch)
+    repo: dict[str, Package] = discover_packages()
+    packages = filter_packages_by_paths(repo, paths)
+    build_packages(
+        repo,
+        packages,
+        arch,
+        force=force,
+        enable_crosscompile=enable_crosscompile,
+        enable_crossdirect=enable_crossdirect,
+        enable_ccache=enable_ccache,
+    )
+
+
 @click.group(name='packages')
 def cmd_packages():
     pass
@@ -499,52 +575,34 @@ def cmd_packages():
 @click.argument('paths', nargs=-1)
 def cmd_build(paths: list[str], force=False, arch=None):
     if arch is None:
-        # arch = config.get_profile()...
+        # TODO: arch = config.get_profile()...
         arch = 'aarch64'
 
     if arch not in ARCHES:
         raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
     enforce_wrap()
+    native = config.runtime['arch']
+    if arch != native:
+        # build qemu-user, binfmt, crossdirect
+        build_packages_by_paths(
+            ['main/' + pkg for pkg in CROSSDIRECT_PKGS],
+            native,
+            enable_crosscompile=False,
+            enable_crossdirect=False,
+            enable_ccache=False,
+        )
+        for pkg in CROSSDIRECT_PKGS:
+            subprocess.run(['pacman', '-Syy', pkg, '--noconfirm', '--needed'])
+        binfmt_register(arch)
 
-    for _arch in set([arch, config.runtime['arch']]):
-        check_prebuilts(_arch)
-
-    paths = list(paths)
-    repo = discover_packages()
-
-    package_levels = generate_dependency_chain(
-        repo,
-        filter_packages_by_paths(repo, paths),
+    build_packages_by_paths(
+        paths,
+        arch,
+        force=force,
+        enable_crosscompile=config.file['build']['crosscompile'],
+        enable_crossdirect=config.file['build']['crossdirect'],
+        enable_ccache=config.file['build']['ccache'],
     )
-    build_names = set[str]()
-    build_levels = list[set[Package]]()
-    i = 0
-    for packages in package_levels:
-        level = set[Package]()
-        for package in packages:
-            if ((not check_package_version_built(package, arch)) or set.intersection(set(package.depends), set(build_names)) or
-                (force and package.path in paths)):
-                level.add(package)
-                build_names.update(package.names)
-        if level:
-            build_levels.append(level)
-            logging.debug(f'Adding to level {i}:' + '\n' + ('\n'.join([p.name for p in level])))
-            i += 1
-
-    if not build_levels:
-        logging.info('Everything built already')
-        return
-    for level, need_build in enumerate(build_levels):
-        logging.info(f"(Level {level}) Building {', '.join([x.name for x in need_build])}")
-        for package in need_build:
-            build_package(
-                package,
-                arch=arch,
-                enable_crosscompile=config.file['build']['crosscompile'],
-                enable_crossdirect=config.file['build']['crossdirect'],
-                enable_ccache=config.file['build']['ccache'],
-            )
-            add_package_to_repo(package, arch)
 
 
 @cmd_packages.command(name='clean')

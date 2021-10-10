@@ -57,8 +57,7 @@ def create_chroot(chroot_name: str,
             file.write(data)
 
         # configure makepkg
-        with open(f'{chroot_path}/etc/makepkg.conf', 'r') as file:
-            data = file.read()
+        data = generate_makepkg_conf(arch, cross=False)
         data = data.replace('xz -c', 'xz -T0 -c')
         data = data.replace(' check ', ' !check ')
         with open(f'{chroot_path}/etc/makepkg.conf', 'w') as file:
