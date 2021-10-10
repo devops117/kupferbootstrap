@@ -434,7 +434,7 @@ def config_prompt(text: str, default: any, field_type: type = str, bold: bool = 
 @cmd_profile.command(name='init')
 @noninteractive_flag
 @noop_flag
-@click.argument('name', required=False)
+@click.argument('name', required=True)
 def cmd_profile_init(name: str = None, non_interactive: bool = False, noop: bool = False):
     """Create or edit a profile"""
     profile = {key: None for key in PROFILE_DEFAULTS.keys()}
