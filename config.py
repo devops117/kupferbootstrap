@@ -366,9 +366,10 @@ def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool
 
             results[section] = {}
             for key, current in config.file[section].items():
-                result, changed = config_prompt(text=f'{section}.{key}', default=current, field_type=type(current))
+                text = f'{section}.{key}'
+                result, changed = config_prompt(text=text, default=current, field_type=type(current))
                 if changed:
-                    print(f'{key} = {result}')
+                    print(f'{text} = {result}')
                     results[section][key] = result
 
         config.update(results)
@@ -398,7 +399,8 @@ def config_prompt(text: str, default: any, field_type: type = str, bold: bool = 
 
     def true_or_zero(to_check) -> bool:
         """returns true if the value is truthy or int(0)"""
-        return to_check or to_check == 0
+        zero = 0  # compiler complains about 'is with literal' otherwise
+        return to_check or to_check is zero  # can't do == due to boolean<->int casting
 
     def list_to_comma_str(str_list: list[str], default='') -> str:
         if str_list is None:
@@ -448,9 +450,10 @@ def cmd_profile_init(name: str = None, non_interactive: bool = False, noop: bool
     if not non_interactive:
         for key, current in profile.items():
             current = profile[key]
-            result, changed = config_prompt(text=f'{name}.{key}', default=current, field_type=type(PROFILE_DEFAULTS[key]))
+            text = f'{name}.{key}'
+            result, changed = config_prompt(text=text, default=current, field_type=type(PROFILE_DEFAULTS[key]))
             if changed:
-                print(f'{key} = {result}')
+                print(f'{text} = {result}')
                 profile[key] = result
 
     config.update_profile(name, profile)
