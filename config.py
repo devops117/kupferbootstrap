@@ -138,7 +138,7 @@ def merge_configs(conf_new: dict[str, dict], conf_base={}, warn_missing_defaultp
         if outer_name not in CONFIG_DEFAULTS.keys():
             logging.warning(f'Skipped unknown config section "{outer_name}"')
             continue
-        logging.debug(f'Working on outer section "{outer_name}"')
+        logging.debug(f'Parsing config section "{outer_name}"')
         # check if outer_conf is a dict
         if not isinstance(outer_conf, dict):
             parsed[outer_name] = outer_conf
@@ -302,10 +302,26 @@ class ConfigStateHolder:
         """Clear the profile cache (usually after modification)"""
         self._profile_cache = None
 
-    def update(self, config_fragment: dict[str, dict]):
+    def update(self, config_fragment: dict[str, dict], warn_missing_defaultprofile: bool = True):
         if 'profiles' in config_fragment and self.file['profiles'] != config_fragment['profiles']:
             self.invalidate_profile_cache()
-        self.file = merge_configs(config_fragment, conf_base=self.file)
+        self.file = merge_configs(config_fragment, conf_base=self.file, warn_missing_defaultprofile=warn_missing_defaultprofile)
+
+    def update_profile(self, name: str, profile: dict, merge: bool = False, create: bool = True, prune: bool = True):
+        new = {}
+        if name not in self.file['profiles']:
+            if not create:
+                raise Exception(f'Unknown profile: {name}')
+        else:
+            if merge:
+                new = deepcopy(self.file['profiles'][name])
+
+        new |= profile
+
+        if prune:
+            new = {key: val for key, val in new.items() if val is not None}
+        self.file['profiles'][name] = new
+        self.invalidate_profile_cache()
 
 
 config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
@@ -323,12 +339,12 @@ def cmd_config():
     pass
 
 
-noninterace_flag = click.option('--non-interactive', is_flag=True)
+noninteractive_flag = click.option('--non-interactive', is_flag=True)
 noop_flag = click.option('--noop', '-n', is_flag=True)
 
 
 @cmd_config.command(name='init')
-@noninterace_flag
+@noninteractive_flag
 @noop_flag
 @click.option(
     '--sections',
@@ -342,26 +358,30 @@ def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool
     """Initialize the config file"""
     if not non_interactive:
         results = {}
-        for section in set(sections) - set(['profiles']):
+        for section in sections:
+            if section not in CONFIG_SECTIONS:
+                raise Exception(f'Unknown section: {section}')
+            if section == 'profiles':
+                continue
+
             results[section] = {}
             for key, current in config.file[section].items():
-                result = config_prompt(key, current, type(current))
-                if result:
+                result, changed = config_prompt(text=f'{section}.{key}', default=current, field_type=type(current))
+                if changed:
                     print(f'{key} = {result}')
                     results[section][key] = result
 
-        if 'profiles' in sections:
-            cmd_profile_init.callback(config.file['profiles']['current'], noop=noop, non_interactive=non_interactive)
-            pass
         config.update(results)
-        if not noop:
+        if 'profiles' in sections:
+            return cmd_profile_init.callback(config.file['profiles']['current'], noop=noop, non_interactive=non_interactive)
+        elif not noop:
             if not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
                 return
 
     if not noop:
         config.write()
     else:
-        logging.info('--noop passed, not writing to file!')
+        logging.info(f'--noop passed, not writing to {config.runtime["config_file"]}!')
 
 
 @cmd_config.group(name='profile')
@@ -370,27 +390,49 @@ def cmd_profile():
     pass
 
 
-def list_to_comma_str(l: list[str]) -> str:
-    return ','.join(l if l else [])
+def config_prompt(text: str, default: any, field_type: type = str, bold: bool = True) -> (any, bool):
+    """
+    prompts for a new value for a config key. returns the result and a boolean that indicates
+    whether the result is different, considering empty strings and None equal to each other.
+    """
 
+    def true_or_zero(to_check) -> bool:
+        """returns true if the value is truthy or int(0)"""
+        return to_check or to_check == 0
 
-def comma_str_to_list(s: str) -> list[str]:
-    return [a for a in s.split(',') if a]
+    def list_to_comma_str(str_list: list[str], default='') -> str:
+        if str_list is None:
+            return default
+        return ','.join(str_list)
 
+    def comma_str_to_list(s: str, default=None) -> list[str]:
+        if not s:
+            return default
+        return [a for a in s.split(',') if a]
 
-def config_prompt(key, default, type):
-    if type == list:
+    if type(None) == field_type:
+        field_type = str
+
+    if field_type == dict:
+        raise Exception('Dictionaries not supported by config_prompt, this is likely a bug in kupferbootstrap')
+    elif field_type == list:
         default = list_to_comma_str(default)
-        result = comma_str_to_list(click.prompt(key.capitalize(), default=default, show_default=True))
+        value_conv = comma_str_to_list
     else:
-        default = '' if not default else default
-        result = click.prompt(key.capitalize(), type=str, default=default, show_default=True)
+        value_conv = None
+        default = '' if default is None else default
 
-    return result
+    if bold:
+        text = click.style(text, bold=True)
+
+    result = click.prompt(text, type=field_type, default=default, value_proc=value_conv, show_default=True)
+    changed = result != default and (true_or_zero(default) or true_or_zero(result))
+
+    return result, changed
 
 
 @cmd_profile.command(name='init')
-@noninterace_flag
+@noninteractive_flag
 @noop_flag
 @click.argument('name', required=False)
 def cmd_profile_init(name: str = None, non_interactive: bool = False, noop: bool = False):
@@ -403,11 +445,21 @@ def cmd_profile_init(name: str = None, non_interactive: bool = False, noop: bool
         logging.info(f"Profile {name} doesn't exist yet, creating new profile.")
 
     logging.info(f'Configuring profile "{name}"')
-    for key, current in profile.items():
-        result = config_prompt(key, profile[key], type(PROFILE_DEFAULTS[key]))
-        if result:
-            print(f'{key} = {result}')
-            profile[key] = result
+    if not non_interactive:
+        for key, current in profile.items():
+            current = profile[key]
+            result, changed = config_prompt(text=f'{name}.{key}', default=current, field_type=type(PROFILE_DEFAULTS[key]))
+            if changed:
+                print(f'{key} = {result}')
+                profile[key] = result
+
+    config.update_profile(name, profile)
+    if not noop:
+        if not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
+            return
+        config.write()
+    else:
+        logging.info(f'--noop passed, not writing to {config.runtime["config_file"]}!')
 
 
 # temporary demo
