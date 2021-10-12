@@ -388,7 +388,6 @@ def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool
 @cmd_config.group(name='profile')
 def cmd_profile():
     """Manage config profiles"""
-    pass
 
 
 def config_prompt(text: str, default: any, field_type: type = str, bold: bool = True) -> (any, bool):
