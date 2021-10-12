@@ -23,6 +23,8 @@ PROFILE_DEFAULTS: Profile = {
     'password': None,
 }
 
+PROFILE_EMPTY: Profile = {key: None for key in PROFILE_DEFAULTS.keys()}
+
 CONFIG_DEFAULTS = {
     'build': {
         'ccache': True,
@@ -324,73 +326,13 @@ class ConfigStateHolder:
         self.invalidate_profile_cache()
 
 
-config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
-
-config_option = click.option(
-    '-C',
-    '--config',
-    'config_file',
-    help='Override path to config file',
-)
-
-
-@click.group(name='config')
-def cmd_config():
-    pass
-
-
-noninteractive_flag = click.option('--non-interactive', is_flag=True)
-noop_flag = click.option('--noop', '-n', is_flag=True)
-
-
-@cmd_config.command(name='init')
-@noninteractive_flag
-@noop_flag
-@click.option(
-    '--sections',
-    '-s',
-    multiple=True,
-    type=click.Choice(CONFIG_SECTIONS),
-    default=CONFIG_SECTIONS,
-    show_choices=True,
-)
-def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool = False, noop: bool = False):
-    """Initialize the config file"""
-    if not non_interactive:
-        results = {}
-        for section in sections:
-            if section not in CONFIG_SECTIONS:
-                raise Exception(f'Unknown section: {section}')
-            if section == 'profiles':
-                continue
-
-            results[section] = {}
-            for key, current in config.file[section].items():
-                text = f'{section}.{key}'
-                result, changed = config_prompt(text=text, default=current, field_type=type(current))
-                if changed:
-                    print(f'{text} = {result}')
-                    results[section][key] = result
-
-        config.update(results)
-        if 'profiles' in sections:
-            return cmd_profile_init.callback(config.file['profiles']['current'], noop=noop, non_interactive=non_interactive)
-        elif not noop:
-            if not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
-                return
-
-    if not noop:
-        config.write()
-    else:
-        logging.info(f'--noop passed, not writing to {config.runtime["config_file"]}!')
-
-
-@cmd_config.group(name='profile')
-def cmd_profile():
-    """Manage config profiles"""
-
-
-def config_prompt(text: str, default: any, field_type: type = str, bold: bool = True) -> (any, bool):
+def prompt_config(
+    text: str,
+    default: any,
+    field_type: type = str,
+    bold: bool = True,
+    echo_changes: bool = True,
+) -> (any, bool):
     """
     prompts for a new value for a config key. returns the result and a boolean that indicates
     whether the result is different, considering empty strings and None equal to each other.
@@ -427,33 +369,116 @@ def config_prompt(text: str, default: any, field_type: type = str, bold: bool = 
         text = click.style(text, bold=True)
 
     result = click.prompt(text, type=field_type, default=default, value_proc=value_conv, show_default=True)
-    changed = result != default and (true_or_zero(default) or true_or_zero(result))
+    changed = (result != default) and (true_or_zero(default) or true_or_zero(result))
+    if changed and echo_changes:
+        print(f'value changed: "{text}" = "{result}"')
 
     return result, changed
+
+
+def prompt_profile(name: str, create: bool = True, defaults: Profile = {}) -> (Profile, bool):
+    """Prompts the user for every field in `defaults`. Set values to None for an empty profile."""
+
+    profile = PROFILE_EMPTY | defaults
+    # don't use get_profile() here because we need the sparse profile
+    if name in config.file['profiles']:
+        profile |= config.file['profiles'][name]
+    elif create:
+        logging.info(f"Profile {name} doesn't exist yet, creating new profile.")
+    else:
+        raise Exception(f'Unknown profile "{name}"')
+    logging.info(f'Configuring profile "{name}"')
+    changed = False
+    for key, current in profile.items():
+        current = profile[key]
+        text = f'{name}.{key}'
+        result, _changed = prompt_config(text=text, default=current, field_type=type(PROFILE_DEFAULTS[key]))
+        if _changed:
+            profile[key] = result
+            changed = True
+    return profile, changed
+
+
+config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
+
+config_option = click.option(
+    '-C',
+    '--config',
+    'config_file',
+    help='Override path to config file',
+)
+
+
+@click.group(name='config')
+def cmd_config():
+    pass
+
+
+noninteractive_flag = click.option('--non-interactive', is_flag=True)
+noop_flag = click.option('--noop', '-n', help="Don't write changes to file", is_flag=True)
+
+
+@cmd_config.command(name='init')
+@noninteractive_flag
+@noop_flag
+@click.option(
+    '--sections',
+    '-s',
+    multiple=True,
+    type=click.Choice(CONFIG_SECTIONS),
+    default=CONFIG_SECTIONS,
+    show_choices=True,
+)
+def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool = False, noop: bool = False):
+    """Initialize the config file"""
+    if not non_interactive:
+        results = {}
+        for section in sections:
+            if section not in CONFIG_SECTIONS:
+                raise Exception(f'Unknown section: {section}')
+            if section == 'profiles':
+                continue
+
+            results[section] = {}
+            for key, current in config.file[section].items():
+                text = f'{section}.{key}'
+                result, changed = prompt_config(text=text, default=current, field_type=type(CONFIG_DEFAULTS[section][key]))
+                if changed:
+                    results[section][key] = result
+
+        config.update(results)
+        if 'profiles' in sections:
+            current_profile = 'default' if 'current' not in config.file['profiles'] else config.file['profiles']['current']
+            new_current, _ = prompt_config('profile.current', default=current_profile, field_type=str)
+            profile, changed = prompt_profile(new_current, create=True)
+            config.update_profile(new_current, profile)
+        if not noop:
+            if not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
+                return
+
+    if not noop:
+        config.write()
+    else:
+        logging.info(f'--noop passed, not writing to {config.runtime["config_file"]}!')
+
+
+@cmd_config.group(name='profile')
+def cmd_profile():
+    """Manage config profiles"""
 
 
 @cmd_profile.command(name='init')
 @noninteractive_flag
 @noop_flag
 @click.argument('name', required=True)
-def cmd_profile_init(name: str = None, non_interactive: bool = False, noop: bool = False):
+def cmd_profile_init(name: str, non_interactive: bool = False, noop: bool = False):
     """Create or edit a profile"""
-    profile = {key: None for key in PROFILE_DEFAULTS.keys()}
-    # don't use get_profile() here because we need the sparse profile
+    profile = deepcopy(PROFILE_EMPTY)
     if name in config.file['profiles']:
         profile |= config.file['profiles'][name]
-    else:
-        logging.info(f"Profile {name} doesn't exist yet, creating new profile.")
 
-    logging.info(f'Configuring profile "{name}"')
     if not non_interactive:
-        for key, current in profile.items():
-            current = profile[key]
-            text = f'{name}.{key}'
-            result, changed = config_prompt(text=text, default=current, field_type=type(PROFILE_DEFAULTS[key]))
-            if changed:
-                print(f'{text} = {result}')
-                profile[key] = result
+        profile = prompt_profile(name, create=True)
 
     config.update_profile(name, profile)
     if not noop:
