@@ -7,7 +7,7 @@ def generate_makepkg_conf(arch: str, cross: bool = False, chroot: str = None) ->
     Generate a makepkg.conf. For use with crosscompiling, specify `cross=True` and pass as `chroot`
     the relative path inside the native chroot where the foreign chroot will be mounted.
     """
-    hostspec = GCC_HOSTSPECS[config.runtime['arch']][arch]
+    hostspec = GCC_HOSTSPECS[config.runtime['arch'] if cross else arch][arch]
     cflags = CFLAGS_ARCHES[arch] + CFLAGS_GENERAL
     if cross and not chroot:
         raise Exception('Cross-compile makepkg conf requested but no chroot path given: "{chroot}"')
