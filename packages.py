@@ -714,18 +714,6 @@ def cmd_check(paths):
                     hold_key = False
                     next_key = True
 
-                if package.repo != 'main':
-                    missing_prefix = False
-                    if key == pkgbase_key or (key == pkgname_key and required[pkgname_key]):
-                        if not line.split('=')[1].startswith(f'{package.repo}-') and not line.split('=')[1].startswith(f'"{package.repo}-'):
-                            missing_prefix = True
-                    if key == pkgname_key and hold_key and not required[pkgname_key]:
-                        if not line[4:].startswith(f'{package.repo}-') and not line[4:].startswith(f'"{package.repo}-'):
-                            missing_prefix = True
-                    if missing_prefix:
-                        formatted = False
-                        reason = f'Package name needs to have "{package.repo}-" as prefix'
-
                 if key == arches_key:
                     required_arches = line.split('=')[1]
 
