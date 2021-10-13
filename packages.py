@@ -585,7 +585,7 @@ def cmd_build(paths: list[str], force=False, arch=None):
     if arch != native:
         # build qemu-user, binfmt, crossdirect
         build_packages_by_paths(
-            ['main/' + pkg for pkg in CROSSDIRECT_PKGS],
+            ['cross/' + pkg for pkg in CROSSDIRECT_PKGS],
             native,
             enable_crosscompile=False,
             enable_crossdirect=False,
