@@ -4,7 +4,7 @@ import subprocess
 import click
 from logger import logging
 from chroot import create_chroot, create_chroot_user, get_chroot_path, run_chroot_cmd
-from constants import DEVICES, FLAVOURS
+from constants import BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config
 from distro import get_kupfer_https, get_kupfer_local
 from wrapper import enforce_wrap
@@ -140,7 +140,7 @@ def cmd_build():
         result = subprocess.run([
             'fallocate',
             '-l',
-            f"{FLAVOURS[flavour].get('size',4)}G",
+            f"{FLAVOURS[flavour].get('size',2)}G",
             image_name,
         ])
         if result.returncode != 0:
@@ -166,7 +166,7 @@ def cmd_build():
         extra_repos = get_kupfer_local(arch).repos
     else:
         extra_repos = get_kupfer_https(arch).repos
-    packages = ['base', 'base-kupfer'] + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
+    packages = BASE_PACKAGES + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
     create_chroot(
         chroot_name,
         arch=arch,
@@ -181,7 +181,7 @@ def cmd_build():
         password=profile['password'],
     )
     if post_cmds:
-        result = run_chroot_cmd(' && '.join(post_cmds), chroot_name)
+        result = run_chroot_cmd(' && '.join(post_cmds), rootfs_mount)
         if result.returncode != 0:
             raise Exception('Error running post_cmds')
 

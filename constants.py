@@ -27,6 +27,13 @@ DEVICES = {
     'bq-paella': ['device-msm8916-bq-paella'],
 }
 
+BASE_PACKAGES = [
+    'base',
+    'base-kupfer',
+    'nano',
+    'vim',
+]
+
 FLAVOURS = {
     'barebone': {
         'packages': [],
@@ -39,6 +46,21 @@ FLAVOURS = {
         'post_cmds': ['systemctl enable gdm'],
         'size': 8,
     },
+    'phosh': {
+        'packages': [
+            'phosh',
+            'squeekboard',
+            'gnome-control-center',
+            'gnome-software',
+            'gnome-software-packagekit-plugin',
+            'archlinux-appstream-data',
+            'gnome-initial-setup',
+            'kgx',
+            'iio-sensor-proxy',
+        ],
+        'post_cmds': ['systemctl enable phosh'],
+        'size': 3,
+    }
 }
 
 REPOSITORIES = [
@@ -48,6 +70,7 @@ REPOSITORIES = [
     'firmware',
     'linux',
     'main',
+    'phosh',
 ]
 
 Arch = str
