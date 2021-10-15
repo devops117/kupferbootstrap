@@ -1,5 +1,6 @@
 import atexit
 import os
+import pathlib
 import subprocess
 import sys
 import uuid
@@ -102,10 +103,14 @@ def wrap_docker():
         atexit.register(at_exit)
 
         dump_config_file(file_path=wrapped_config, config=(config.file | {'paths': DOCKER_PATHS}))
+        ssh_dir = os.path.join(pathlib.Path.home(), '.ssh')
+        if not os.path.exists(ssh_dir):
+            os.makedirs(ssh_dir)
         volumes = {
             '/dev': '/dev',
             os.getcwd(): '/src',
             wrapped_config: '/root/.config/kupfer/kupferbootstrap.toml',
+            ssh_dir: '/root/.ssh',
         }
         volumes |= dict({config.get_path(vol_name): vol_dest for vol_name, vol_dest in DOCKER_PATHS.items()})
         docker_cmd = [

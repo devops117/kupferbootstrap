@@ -7,6 +7,7 @@ from chroot import create_chroot, create_chroot_user, get_chroot_path, run_chroo
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config
 from distro import get_base_distro, get_kupfer_https, get_kupfer_local
+from ssh import copy_ssh_keys
 from wrapper import enforce_wrap
 from signal import pause
 
@@ -181,6 +182,10 @@ def cmd_build():
         password=profile['password'],
     )
 
+    copy_ssh_keys(
+        rootfs_mount,
+        user=profile['username'],
+    )
     with open(os.path.join(rootfs_mount, 'etc', 'pacman.conf'), 'w') as file:
         file.write(get_base_distro(arch).get_pacman_conf(check_space=True, extra_repos=get_kupfer_https(arch).repos))
     if post_cmds:

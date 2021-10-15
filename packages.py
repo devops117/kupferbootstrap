@@ -11,6 +11,7 @@ from constants import REPOSITORIES, CROSSDIRECT_PKGS, GCC_HOSTSPECS, ARCHES
 from config import config
 from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect, write_cross_makepkg_conf, mount_packages, mount_pacman_cache
 from distro import get_kupfer_local
+from ssh import run_ssh_command, scp_put_files
 from wrapper import enforce_wrap
 from utils import mount, umount, git
 from binfmt import register as binfmt_register
@@ -348,10 +349,14 @@ def add_package_to_repo(package: Package, arch: str):
     logging.info(f'Adding {package.path} to repo {package.repo}')
     pkgbuild_dir = os.path.join(config.get_path('pkgbuilds'), package.path)
 
+    files = []
     for file in os.listdir(pkgbuild_dir):
         # Forced extension by makepkg.conf
         if file.endswith('.pkg.tar.xz') or file.endswith('.pkg.tar.zst'):
+            repo_dir = os.path.join(config.get_package_dir(arch), package.repo)
+            files.append(os.path.join(repo_dir, file))
             add_file_to_repo(os.path.join(pkgbuild_dir, file), package.repo, arch)
+    return files
 
 
 def check_package_version_built(package: Package, arch) -> bool:
@@ -555,6 +560,8 @@ def build_packages(
     if not build_levels:
         logging.info('Everything built already')
         return
+
+    files = []
     for level, need_build in enumerate(build_levels):
         logging.info(f"(Level {level}) Building {', '.join([x.name for x in need_build])}")
         for package in need_build:
@@ -565,7 +572,8 @@ def build_packages(
                 enable_crossdirect=enable_crossdirect,
                 enable_ccache=enable_ccache,
             )
-            add_package_to_repo(package, arch)
+            files += add_package_to_repo(package, arch)
+    return files
 
 
 def build_packages_by_paths(
@@ -583,7 +591,7 @@ def build_packages_by_paths(
     for _arch in set([arch, config.runtime['arch']]):
         init_prebuilts(_arch)
     packages = filter_packages_by_paths(repo, paths)
-    build_packages(
+    return build_packages(
         repo,
         packages,
         arch,
@@ -611,6 +619,10 @@ def cmd_update(non_interactive: bool = False):
 @click.option('--arch', default=None)
 @click.argument('paths', nargs=-1)
 def cmd_build(paths: list[str], force=False, arch=None):
+    build(paths, force, arch)
+
+
+def build(paths: list[str], force: bool, arch: str):
     if arch is None:
         # TODO: arch = config.get_profile()...
         arch = 'aarch64'
@@ -634,7 +646,7 @@ def cmd_build(paths: list[str], force=False, arch=None):
         subprocess.run(['pacman', '-Syy', '--noconfirm', '--needed'] + CROSSDIRECT_PKGS)
         binfmt_register(arch)
 
-    build_packages_by_paths(
+    return build_packages_by_paths(
         paths,
         arch,
         repo,
@@ -643,6 +655,22 @@ def cmd_build(paths: list[str], force=False, arch=None):
         enable_crossdirect=config.file['build']['crossdirect'],
         enable_ccache=config.file['build']['ccache'],
     )
+
+
+@cmd_packages.command(name='sideload')
+@click.argument('paths', nargs=-1)
+def cmd_sideload(paths: list[str]):
+    files = build(paths, True, None)
+    scp_put_files(files, '/tmp')
+    run_ssh_command([
+        'sudo',
+        '-S',
+        'pacman',
+        '-U',
+    ] + [os.path.join('/tmp', os.path.basename(file)) for file in files] + [
+        '--noconfirm',
+        '--overwrite=*',
+    ])
 
 
 @cmd_packages.command(name='clean')
