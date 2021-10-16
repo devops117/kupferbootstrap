@@ -3,7 +3,7 @@ import logging
 import subprocess
 import os
 from config import config
-from distro import get_base_distros, RepoInfo
+from distro import get_base_distro, RepoInfo
 from shlex import quote as shell_quote
 from utils import mount
 from distro import get_kupfer_local
@@ -28,7 +28,7 @@ def create_chroot(chroot_name: str,
                   bind_mounts: dict[str, str] = BIND_BUILD_DIRS):
     base_chroot = f'base_{arch}'
     chroot_path = get_chroot_path(chroot_name, override_basepath=chroot_base_path)
-    base_distro = get_base_distros()[arch]
+    base_distro = get_base_distro(arch)
     pacman_conf_target = chroot_path + '/etc/pacman.conf'
 
     # copy base_chroot instead of creating from scratch every time

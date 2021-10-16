@@ -95,9 +95,9 @@ class Distro:
 
     def _repos_config_snippet(self, extra_repos: dict[str, RepoInfo] = {}) -> str:
         extras = [Repo(name, url_template=info.url_template, arch=self.arch, options=info.options, scan=False) for name, info in extra_repos.items()]
-        return '\n'.join(repo.config_snippet() for repo in (list(self.repos.values()) + extras))
+        return '\n\n'.join(repo.config_snippet() for repo in (list(self.repos.values()) + extras))
 
-    def get_pacman_conf(self, extra_repos: dict[str, RepoInfo] = [], check_space=False):
+    def get_pacman_conf(self, extra_repos: dict[str, RepoInfo] = {}, check_space=False):
         header = f'''
 #
 # /etc/pacman.conf
@@ -170,30 +170,17 @@ LocalFileSigLevel = Optional
         return header + self._repos_config_snippet(extra_repos)
 
 
-_base_distros: dict[str, Distro] = None
-_kupfer_distros: dict[str, Distro] = {}
-
-
-def get_base_distros() -> dict[str, Distro]:
-    global _base_distros
-    if not _base_distros:
-        _distros: dict[str, Distro] = {}
-        for arch, distro_conf in BASE_DISTROS.items():
-            repos = {name: RepoInfo(url_template=url) for name, url in distro_conf['repos'].items()}
-            _distros[arch] = Distro(arch=arch, repo_infos=repos, scan=False)
-        _base_distros = _distros
-    return _base_distros
+def get_base_distro(arch: str) -> Distro:
+    repos = {name: RepoInfo(url_template=url) for name, url in BASE_DISTROS[arch]['repos'].items()}
+    return Distro(arch=arch, repo_infos=repos, scan=False)
 
 
 def get_kupfer(arch: str, url_template: str) -> Distro:
-    global _kupfer_distros
-    if arch not in _kupfer_distros:
-        repos = {name: RepoInfo(url_template=url_template, options={'SigLevel': 'Never'}) for name in REPOSITORIES}
-        _kupfer_distros[arch] = Distro(
-            arch=arch,
-            repo_infos=repos,
-        )
-    return _kupfer_distros[arch]
+    repos = {name: RepoInfo(url_template=url_template, options={'SigLevel': 'Never'}) for name in REPOSITORIES}
+    return Distro(
+        arch=arch,
+        repo_infos=repos,
+    )
 
 
 def get_kupfer_https(arch: str) -> Distro:
