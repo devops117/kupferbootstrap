@@ -6,7 +6,7 @@ from logger import logging
 from chroot import create_chroot, create_chroot_user, get_chroot_path, run_chroot_cmd
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config
-from distro import get_kupfer_https, get_kupfer_local
+from distro import get_base_distro, get_kupfer_https, get_kupfer_local
 from wrapper import enforce_wrap
 from signal import pause
 
@@ -180,6 +180,9 @@ def cmd_build():
         user=profile['username'],
         password=profile['password'],
     )
+
+    with open(os.path.join(rootfs_mount, 'etc', 'pacman.conf'), 'w') as file:
+        file.write(get_base_distro(arch).get_pacman_conf(check_space=True, extra_repos=get_kupfer_https(arch).repos))
     if post_cmds:
         result = run_chroot_cmd(' && '.join(post_cmds), rootfs_mount)
         if result.returncode != 0:
