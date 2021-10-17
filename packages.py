@@ -82,7 +82,7 @@ class Package:
         self.names = list(set(names))
         self.depends = list(set(depends))
 
-        self.repo = self.path.split('/')[0]
+        self.repo = self.path.split('/')[2]
 
         mode = ''
         with open(os.path.join(self.path, 'PKGBUILD'), 'r') as file:
