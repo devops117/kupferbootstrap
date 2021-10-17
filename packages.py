@@ -160,7 +160,7 @@ def discover_packages(dir: str = None) -> dict[str, Package]:
     init_pkgbuilds(interactive=False)
     for repo in REPOSITORIES:
         for _dir in os.listdir(os.path.join(dir, repo)):
-            paths.append(os.path.join(repo, _dir))
+            paths.append(os.path.join(dir, repo, _dir))
 
     results = Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(Package)(path, dir) for path in paths)
     for package in results:
@@ -191,7 +191,7 @@ def filter_packages_by_paths(repo: dict[str, Package], paths: list[str]) -> list
         return repo.values()
     result = []
     for pkg in repo.values():
-        if pkg.path in paths:
+        if pkg.path.replace('/pkgbuilds/', '') in paths:
             result += [pkg]
     return result
 
@@ -498,17 +498,17 @@ def build_package(
                 env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
             logging.debug(('Building for native arch. ' if not foreign_arch else '') + 'Skipping crossdirect.')
 
-    src_dir = os.path.join(build_root, 'src')
+    src_dir = os.path.join(build_root, 'pkgbuilds')
     os.makedirs(src_dir, exist_ok=True)
     #setup_sources(package, build_root, enable_crosscompile=enable_crosscompile)
 
     result = mount(config.get_path('pkgbuilds'), src_dir)
     if result.returncode != 0:
-        raise Exception(f'Failed to bind mount pkgbuilds to {build_root}/src')
+        raise Exception(f'Failed to bind mount pkgbuilds to {src_dir}')
     umount_dirs += [src_dir]
 
     makepkg_conf_absolute = os.path.join('/', makepkg_conf_path)
-    build_cmd = f'cd /src/{package.path} && makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
+    build_cmd = f'cd {package.path} && makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
     logging.debug(f'Building: Running {build_cmd}')
     result = run_chroot_cmd(build_cmd, chroot_path=build_root, inner_env=env)
 
@@ -571,6 +571,7 @@ def build_packages(
 def build_packages_by_paths(
     paths: list[str],
     arch: str,
+    repo: dict[str, Package],
     force=False,
     enable_crosscompile: bool = True,
     enable_crossdirect: bool = True,
@@ -581,7 +582,6 @@ def build_packages_by_paths(
 
     for _arch in set([arch, config.runtime['arch']]):
         init_prebuilts(_arch)
-    repo: dict[str, Package] = discover_packages()
     packages = filter_packages_by_paths(repo, paths)
     build_packages(
         repo,
@@ -618,12 +618,14 @@ def cmd_build(paths: list[str], force=False, arch=None):
     if arch not in ARCHES:
         raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
     enforce_wrap()
+    repo: dict[str, Package] = discover_packages()
     native = config.runtime['arch']
     if arch != native:
         # build qemu-user, binfmt, crossdirect
         build_packages_by_paths(
             ['cross/' + pkg for pkg in CROSSDIRECT_PKGS],
             native,
+            repo,
             enable_crosscompile=False,
             enable_crossdirect=False,
             enable_ccache=False,
@@ -635,6 +637,7 @@ def cmd_build(paths: list[str], force=False, arch=None):
     build_packages_by_paths(
         paths,
         arch,
+        repo,
         force=force,
         enable_crosscompile=config.file['build']['crosscompile'],
         enable_crossdirect=config.file['build']['crossdirect'],
@@ -645,10 +648,13 @@ def cmd_build(paths: list[str], force=False, arch=None):
 @cmd_packages.command(name='clean')
 def cmd_clean():
     enforce_wrap()
-    result = git([
-        'clean',
-        '-dffX',
-    ] + REPOSITORIES)
+    result = git(
+        [
+            'clean',
+            '-dffX',
+        ] + REPOSITORIES,
+        dir='/pkgbuilds',
+    )
     if result.returncode != 0:
         logging.fatal('Failed to git clean')
         exit(1)

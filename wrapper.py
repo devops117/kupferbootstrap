@@ -13,7 +13,7 @@ DOCKER_PATHS = {
     'jumpdrive': '/var/cache/jumpdrive',
     'pacman': '/var/cache/pacman',
     'packages': '/prebuilts',
-    'pkgbuilds': '/src',
+    'pkgbuilds': '/pkgbuilds',
 }
 
 
@@ -104,6 +104,7 @@ def wrap_docker():
         dump_config_file(file_path=wrapped_config, config=(config.file | {'paths': DOCKER_PATHS}))
         volumes = {
             '/dev': '/dev',
+            os.getcwd(): '/src',
             wrapped_config: '/root/.config/kupfer/kupferbootstrap.toml',
         }
         volumes |= dict({config.get_path(vol_name): vol_dest for vol_name, vol_dest in DOCKER_PATHS.items()})
