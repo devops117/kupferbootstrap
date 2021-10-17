@@ -32,13 +32,17 @@ CONFIG_DEFAULTS = {
         'crossdirect': True,
         'threads': 0,
     },
+    'pkgbuilds': {
+        'git_repo': 'https://gitlab.com/kupfer/packages/pkgbuilds.git',
+        'git_branch': 'dev',
+    },
     'paths': {
         'cache_dir': CACHE_DIR,
         'chroots': os.path.join('%cache_dir%', 'chroots'),
         'pacman': os.path.join('%cache_dir%', 'pacman'),
-        'jumpdrive': os.path.join('%cache_dir%', 'jumpdrive'),
         'packages': os.path.join('%cache_dir%', 'packages'),
-        'pkgbuilds': os.path.abspath(os.getcwd()),
+        'pkgbuilds': os.path.join('%cache_dir%', 'pkgbuilds'),
+        'jumpdrive': os.path.join('%cache_dir%', 'jumpdrive'),
     },
     'profiles': {
         'current': 'default',

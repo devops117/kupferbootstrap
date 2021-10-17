@@ -41,3 +41,7 @@ def mount(src: str, dest: str, options=['bind'], fs_type=None) -> subprocess.Com
     if result.returncode == 0:
         atexit.register(umount, dest)
     return result
+
+
+def git(cmd: list[str], dir='.', capture_output=False) -> subprocess.CompletedProcess:
+    return subprocess.run(['git'] + cmd, cwd=dir, capture_output=capture_output)

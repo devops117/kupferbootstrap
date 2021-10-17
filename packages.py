@@ -12,7 +12,7 @@ from config import config
 from chroot import create_chroot, run_chroot_cmd, try_install_packages, mount_crossdirect, write_cross_makepkg_conf, mount_packages, mount_pacman_cache
 from distro import get_kupfer_local
 from wrapper import enforce_wrap
-from utils import mount, umount
+from utils import mount, umount, git
 from binfmt import register as binfmt_register
 
 makepkg_env = os.environ.copy() | {
@@ -99,6 +99,36 @@ class Package:
         return f'package({self.name},{repr(self.names)})'
 
 
+def clone_pkbuilds(pkgbuilds_dir: str, repo_url: str, branch: str, interactive=False):
+    git_dir = os.path.join(pkgbuilds_dir, '.git')
+    if not os.path.exists(git_dir):
+        logging.info('Cloning branch {branch} from {repo}')
+        result = git(['clone', '-b', branch, repo_url, pkgbuilds_dir])
+        if result.returncode != 0:
+            raise Exception('Error cloning pkgbuilds')
+    else:
+        result = git(['--git-dir', git_dir, 'branch', '--show-current'], capture_output=True)
+        current_branch = result.stdout.decode().strip()
+        if current_branch != branch:
+            logging.warning(f'pkgbuilds repository is on the wrong branch: {current_branch}, requested: {branch}')
+            if interactive and click.confirm('Would you like to switch branches?', default=False):
+                result = git(['switch', branch], dir=pkgbuilds_dir)
+                if result.returncode != 0:
+                    raise Exception('failed switching branches')
+        if interactive:
+            if click.confirm('Would you like to try updating the PKGBUILDs repo?'):
+                result = git(['pull'], pkgbuilds_dir)
+                if result.returncode != 0:
+                    raise Exception('failed to update pkgbuilds')
+
+
+def init_pkgbuilds(interactive=False):
+    pkgbuilds_dir = config.get_path('pkgbuilds')
+    repo_url = config.file['pkgbuilds']['git_repo']
+    branch = config.file['pkgbuilds']['git_branch']
+    clone_pkbuilds(pkgbuilds_dir, repo_url, branch, interactive=interactive)
+
+
 def init_prebuilts(arch: str, dir: str = None):
     """Ensure that all `constants.REPOSITORIES` inside `dir` exist"""
     prebuilts_dir = dir if dir else config.get_package_dir(arch)
@@ -127,7 +157,7 @@ def discover_packages(dir: str = None) -> dict[str, Package]:
     dir = dir if dir else config.get_path('pkgbuilds')
     packages = {}
     paths = []
-
+    init_pkgbuilds(interactive=False)
     for repo in REPOSITORIES:
         for _dir in os.listdir(os.path.join(dir, repo)):
             paths.append(os.path.join(repo, _dir))
@@ -569,6 +599,13 @@ def cmd_packages():
     pass
 
 
+@cmd_packages.command(name='update')
+@click.option('--non-interactive', is_flag=True)
+def cmd_update(non_interactive: bool = False):
+    enforce_wrap()
+    init_pkgbuilds(interactive=not non_interactive)
+
+
 @cmd_packages.command(name='build')
 @click.option('--force', is_flag=True, default=False)
 @click.option('--arch', default=None)
@@ -608,8 +645,7 @@ def cmd_build(paths: list[str], force=False, arch=None):
 @cmd_packages.command(name='clean')
 def cmd_clean():
     enforce_wrap()
-    result = subprocess.run([
-        'git',
+    result = git([
         'clean',
         '-dffX',
     ] + REPOSITORIES)
