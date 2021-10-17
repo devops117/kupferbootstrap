@@ -630,8 +630,8 @@ def cmd_build(paths: list[str], force=False, arch=None):
             enable_crossdirect=False,
             enable_ccache=False,
         )
-        for pkg in CROSSDIRECT_PKGS:
-            subprocess.run(['pacman', '-Syy', pkg, '--noconfirm', '--needed'])
+
+        subprocess.run(['pacman', '-Syy', '--noconfirm', '--needed'] + CROSSDIRECT_PKGS)
         binfmt_register(arch)
 
     build_packages_by_paths(
