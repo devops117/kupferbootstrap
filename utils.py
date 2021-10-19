@@ -23,7 +23,7 @@ def umount(dest):
     )
 
 
-def mount(src: str, dest: str, options=['bind'], fs_type=None) -> subprocess.CompletedProcess:
+def mount(src: str, dest: str, options=['bind'], fs_type=None, register_unmount=True) -> subprocess.CompletedProcess:
     opts = []
     for opt in options:
         opts += ['-o', opt]
@@ -38,7 +38,7 @@ def mount(src: str, dest: str, options=['bind'], fs_type=None) -> subprocess.Com
         ],
         capture_output=False,
     )
-    if result.returncode == 0:
+    if result.returncode == 0 and register_unmount:
         atexit.register(umount, dest)
     return result
 
