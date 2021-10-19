@@ -46,8 +46,10 @@ BASIC_MOUNTS = {
         'options': ['mode=1777,nosuid,nodev'],
     },
     '/run': {
-        'src': '/run'
-    }
+        'src': '/run',
+        'type': 'tmpfs',
+        'options': ['bind'],
+    },
 }
 
 Chroot = None
@@ -260,8 +262,14 @@ class Chroot:
             return
         if not self.initialised:
             self.init(fail_if_active=False)
+        for dst, opts in BASIC_MOUNTS.items():
+            self.mount(
+                opts['src'],
+                dst,
+                fs_type=opts['type'],
+                options=opts['options']
+            )
         self.active = True
-        raise NotImplementedError('TODO: implement mounting /dev, /proc and /sys')
 
     def deactivate(self, fail_if_inactive: bool = False):
         if not self.active:
