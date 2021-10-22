@@ -50,6 +50,11 @@ BASIC_MOUNTS = {
         'type': 'tmpfs',
         'options': ['bind'],
     },
+    '/etc/resolv.conf': {
+        'src': '/etc/resolv.conf',
+        'type': None,
+        'options': ['bind'],
+    },
 }
 
 Chroot = None
@@ -93,22 +98,21 @@ def get_chroot(
 def get_base_chroot(arch: Arch, **kwargs) -> Chroot:
     name = base_chroot_name(arch)
     default = Chroot(name, arch, initialize=False, copy_base=False)
-    return get_chroot(**kwargs, default=default)
+    if kwargs.pop('initialize', False):
+        logging.debug('get_base_chroot: Had to remove "initialize" from args. This indicates a bug.')
+    return get_chroot(name, **kwargs, initialize=False, default=default)
 
 
 def get_build_chroot(arch: Arch, extra_repos=None, **kwargs) -> Chroot:
-    name = base_chroot_name(arch)
+    name = build_chroot_name(arch)
     extra_repos = get_kupfer_local(arch).repos if extra_repos is None else extra_repos
-    args = {'extra_repos': extra_repos}
-    if kwargs:
-        args |= kwargs
-    default = Chroot(name, arch, initialize=False)
-    return get_chroot(**args, default=default)
+    default = Chroot(name, arch, initialize=False, extra_repos=extra_repos)
+    return get_chroot(name, **kwargs, default=default)
 
 
 def get_device_chroot(name: str, arch: Arch, **kwargs) -> Chroot:
     default = Chroot(name, arch, initialize=False)
-    return get_chroot(**kwargs, default=default)
+    return get_chroot(name, **kwargs, default=default)
 
 
 class Chroot:
@@ -118,7 +122,7 @@ class Chroot:
     arch: Arch
     initialized: bool = False
     active: bool = False
-    active_mounts = []
+    active_mounts: list[str] = []
     copy_base: bool = True
     extra_repos: dict[str, RepoInfo] = {}
     base_packages: list[str] = ['base']
@@ -134,12 +138,14 @@ class Chroot:
         initialize: bool = False,
         extra_repos: dict[str, RepoInfo] = {},
         base_packages: list[str] = ['base', 'base-devel', 'git'],
+        path_override: str = None,
     ):
         if copy_base is None:
+            logging.debug(f'{name}: copy_base is none!')
             copy_base = (name == base_chroot_name(arch))
         self.name = name
         self.arch = arch
-        self.path = os.path.join(config.get_path('chroots'), name)
+        self.path = os.path.join(config.get_path('chroots'), name) if not path_override else path_override
         self.copy_base = copy_base
         self.extra_repos |= extra_repos
         if initialize:
@@ -149,7 +155,8 @@ class Chroot:
 
     def get_path(self, *joins) -> str:
         if joins:
-            joins[0] = joins[0].lstrip('/')
+            joins = (joins[0].lstrip('/'),) + joins[1:]
+
         return os.path.join(self.path, *joins)
 
     def initialize(
@@ -165,8 +172,12 @@ class Chroot:
                 raise Exception(f"Chroot {self.name} is already initialized, this seems like a bug")
             return
 
+        self.deactivate_core()
+
         if self.copy_base:
             base_chroot = get_base_chroot(self.arch, initialize=True)
+            if base_chroot == self:
+                raise Exception('base_chroot == self, bailing out. this is a bug')
             logging.info(f'Copying {base_chroot.name} chroot to {self.name}')
             result = subprocess.run([
                 'rsync',
@@ -234,17 +245,17 @@ class Chroot:
         """returns the absolute path `relative_target` was mounted at"""
         relative_destination = relative_destination.lstrip('/')
         absolute_destination = self.get_path(relative_destination)
-        if relative_destination in self.active_mounts or os.path.ismount(absolute_destination):
+        if os.path.ismount(absolute_destination):
             if fail_if_mounted:
-                raise Exception(f'{self.name}: {relative_destination} is already mounted')
-            logging.warning(f'{self.name}: {relative_destination} already mounted. Skipping.')
+                raise Exception(f'{self.name}: {absolute_destination} is already mounted')
+            logging.warning(f'{self.name}: {absolute_destination} already mounted. Skipping.')
         else:
             if makedir and os.path.isdir(absolute_source):
                 os.makedirs(absolute_destination, exist_ok=True)
             result = mount(absolute_source, absolute_destination, options=options, fs_type=fs_type, register_unmount=False)
             if result.returncode != 0:
                 raise Exception(f'{self.name}: failed to mount {absolute_source} to {relative_destination}')
-            self.active_mounts += relative_destination
+            self.active_mounts += [relative_destination]
             atexit.register(self.deactivate)
         return absolute_destination
 
@@ -253,7 +264,7 @@ class Chroot:
             return
         path = self.get_path(relative_path)
         result = umount(path)
-        if result.returncode == 0:
+        if result.returncode == 0 and relative_path in self.active_mounts:
             self.active_mounts.remove(relative_path)
         return result
 
@@ -263,11 +274,15 @@ class Chroot:
             if fail_if_active:
                 raise Exception(f'chroot {self.name} already active!')
             return
-        if not self.initialised:
-            self.init(fail_if_active=False)
+        if not self.initialized:
+            self.initialize(fail_if_initialized=False)
         for dst, opts in BASIC_MOUNTS.items():
-            self.mount(opts['src'], dst, fs_type=opts['type'], options=opts['options'])
+            self.mount(opts['src'], dst, fs_type=opts['type'], options=opts['options'], fail_if_mounted=fail_if_active)
         self.active = True
+
+    def deactivate_core(self):
+        for dst in BASIC_MOUNTS.keys():
+            self.umount(dst)
 
     def deactivate(self, fail_if_inactive: bool = False):
         if not self.active:
@@ -288,17 +303,28 @@ class Chroot:
                 script: str,
                 inner_env: dict[str, str] = {},
                 outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
-                attach_tty=False) -> subprocess.CompletedProcess:
+                attach_tty: str = False,
+                capture_output: str = False) -> subprocess.CompletedProcess:
         self.activate()
         if outer_env is None:
             outer_env = os.environ.copy()
         env_cmd = ['/usr/bin/env'] + [f'{shell_quote(key)}={shell_quote(value)}' for key, value in inner_env.items()]
         run_func = subprocess.call if attach_tty else subprocess.run
-        result = run_func(['chroot', self.path] + env_cmd + [
+        kwargs = {
+            'env': outer_env,
+        }
+        if not attach_tty:
+            kwargs |= {'capture_output': capture_output}
+
+        if not isinstance(script, str) and isinstance(script, list):
+            script = ' '.join(script)
+        cmd = ['chroot', self.path] + env_cmd + [
             '/bin/bash',
             '-c',
             script,
-        ], env=outer_env)
+        ]
+        logging.debug(f'{self.name}: Running cmd: "{cmd}"')
+        result = run_func(cmd, **kwargs)
         return result
 
     def create_user(
@@ -325,11 +351,12 @@ class Chroot:
 
     def try_install_packages(self, packages: list[str], refresh: bool = False, allow_fail: bool = True) -> dict[str, subprocess.CompletedProcess]:
         """Try installing packages, fall back to installing one by one"""
+        results = {}
         if refresh:
-            self.run_cmd('pacman -Syy --noconfirm')
+            results['refresh'] = self.run_cmd('pacman -Syy --noconfirm')
         cmd = 'pacman -S --noconfirm --needed'
         result = self.run_cmd(f'{cmd} {" ".join(packages)}')
-        results = {package: result for package in packages}
+        results |= {package: result for package in packages}
         if result.returncode != 0 and allow_fail:
             results = {}
             logging.debug('Falling back to serial installation')
@@ -386,16 +413,16 @@ class Chroot:
             raise Exception(f'Failed to mount native chroot {native_chroot.name} to {native_mount}')
         return native_mount
 
-    def mount_pkgbuilds(self) -> str:
+    def mount_pkgbuilds(self, fail_if_mounted: bool = False) -> str:
         packages = config.get_path('pkgbuilds')
-        return self.mount(absolute_source=packages, relative_destination=packages.lstrip('/'))
+        return self.mount(absolute_source=packages, relative_destination=packages.lstrip('/'), fail_if_mounted=fail_if_mounted)
 
-    def mount_pacman_cache(self) -> str:
-        return self.mount(config.get_path('pacman'), '/var/cache/pacman')
+    def mount_pacman_cache(self, fail_if_mounted: bool = False) -> str:
+        return self.mount(os.path.join(config.get_path('pacman'), self.arch), 'var/cache/pacman', fail_if_mounted=fail_if_mounted)
 
-    def mount_packages(self) -> str:
+    def mount_packages(self, fail_if_mounted: bool = False) -> str:
         packages = config.get_path('packages')
-        return self.mount(absolute_source=packages, relative_destination=packages.lstrip('/'))
+        return self.mount(absolute_source=packages, relative_destination=packages.lstrip('/'), fail_if_mounted=fail_if_mounted)
 
     def mount_crosscompile(self, foreign_chroot: Chroot):
         mount_dest = os.path.join('chroot', os.path.basename(foreign_chroot.path))
