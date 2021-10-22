@@ -280,6 +280,10 @@ class Chroot:
         self.umount('proc')
         self.active = False
 
+    def reset(self):
+        self.initialized = False
+        self.initialize()
+
     def run_cmd(self,
                 script: str,
                 inner_env: dict[str, str] = {},
