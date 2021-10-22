@@ -229,6 +229,7 @@ class Chroot:
         options=['bind'],
         fs_type: str = None,
         fail_if_mounted: bool = True,
+        makedir: bool = True,
     ):
         """returns the absolute path `relative_target` was mounted at"""
         relative_destination = relative_destination.lstrip('/')
@@ -238,6 +239,8 @@ class Chroot:
                 raise Exception(f'{self.name}: {relative_destination} is already mounted')
             logging.warning(f'{self.name}: {relative_destination} already mounted. Skipping.')
         else:
+            if makedir and os.path.isdir(absolute_source):
+                os.makedirs(absolute_destination, exist_ok=True)
             result = mount(absolute_source, absolute_destination, options=options, fs_type=fs_type, register_unmount=False)
             if result.returncode != 0:
                 raise Exception(f'{self.name}: failed to mount {absolute_source} to {relative_destination}')
@@ -263,12 +266,7 @@ class Chroot:
         if not self.initialised:
             self.init(fail_if_active=False)
         for dst, opts in BASIC_MOUNTS.items():
-            self.mount(
-                opts['src'],
-                dst,
-                fs_type=opts['type'],
-                options=opts['options']
-            )
+            self.mount(opts['src'], dst, fs_type=opts['type'], options=opts['options'])
         self.active = True
 
     def deactivate(self, fail_if_inactive: bool = False):
@@ -281,9 +279,6 @@ class Chroot:
             self.umount(mount)
         self.umount('proc')
         self.active = False
-
-    def install_packages(packages: list[str]):
-        pass
 
     def run_cmd(self,
                 script: str,
@@ -395,16 +390,23 @@ class Chroot:
         return self.mount(config.get_path('pacman'), '/var/cache/pacman')
 
     def mount_packages(self) -> str:
-        packages = config.get_package_dir(self.arch)
+        packages = config.get_path('packages')
         return self.mount(absolute_source=packages, relative_destination=packages.lstrip('/'))
 
-    def write_cross_makepkg_conf(self, target_arch: str, target_chroot_relative: str, cross: bool = True) -> str:
+    def mount_crosscompile(self, foreign_chroot: Chroot):
+        mount_dest = os.path.join('chroot', os.path.basename(foreign_chroot.path))
+        os.makedirs(os.path.join(self.path, mount_dest), exist_ok=True)
+        return self.mount(absolute_source=foreign_chroot.path, relative_destination=mount_dest)
+
+    def write_makepkg_conf(self, target_arch: Arch, cross_chroot_relative: str, cross: bool = True) -> str:
         """
-        Generate a makepkg_cross_$arch.conf file in /etc, building for `target_chroot_relative`
-        Returns the relative (to `self.path`) path to written file, e.g. `etc/makepkg_cross_aarch64.conf`.
+        Generate a `makepkg.conf` or `makepkg_cross_$arch.conf` file in /etc.
+        If `cross` is set makepkg will be configured to crosscompile for the foreign chroot at `cross_chroot_relative`
+        Returns the relative (to `self.path`) path to the written file, e.g. `etc/makepkg_cross_aarch64.conf`.
         """
-        makepkg_cross_conf = generate_makepkg_conf(target_arch, cross=cross, chroot=target_chroot_relative)
-        makepkg_conf_path_relative = os.path.join('etc', f'makepkg_cross_{target_arch}.conf')
+        makepkg_cross_conf = generate_makepkg_conf(target_arch, cross=cross, chroot=cross_chroot_relative)
+        filename = 'makepkg' + (f'_cross_{target_arch}' if cross else '') + '.conf'
+        makepkg_conf_path_relative = os.path.join('etc', filename)
         makepkg_conf_path = os.path.join(self.path, makepkg_conf_path_relative)
         with open(makepkg_conf_path, 'w') as f:
             f.write(makepkg_cross_conf)
