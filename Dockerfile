@@ -5,7 +5,8 @@ RUN pacman -Syu --noconfirm \
     arch-install-scripts rsync \
     aarch64-linux-gnu-gcc aarch64-linux-gnu-binutils aarch64-linux-gnu-glibc aarch64-linux-gnu-linux-api-headers \
     git \
-    android-tools openssh inetutils
+    android-tools openssh inetutils \
+    parted
 
 RUN sed -i "s/EUID == 0/EUID == -1/g" $(which makepkg)
 

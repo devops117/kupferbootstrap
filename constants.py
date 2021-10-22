@@ -6,9 +6,8 @@ FLASH_PARTS = {
     'QHYPSTUB': 'qhypstub',
 }
 EMMC = 'emmc'
-EMMCFILE = 'emmc-file'
 MICROSD = 'microsd'
-LOCATIONS = [EMMC, EMMCFILE, MICROSD]
+LOCATIONS = [EMMC, MICROSD]
 
 JUMPDRIVE = 'jumpdrive'
 JUMPDRIVE_VERSION = '0.8'
