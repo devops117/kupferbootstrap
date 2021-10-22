@@ -3,7 +3,7 @@ import os
 import subprocess
 import click
 from logger import logging
-from chroot import create_chroot, create_chroot_user, get_chroot_path, run_chroot_cmd
+from chroot import Chroot
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config
 from distro import get_base_distro, get_kupfer_https, get_kupfer_local
