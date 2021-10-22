@@ -172,7 +172,7 @@ SRCEXT='.src.tar.gz'
 #PACMAN_AUTH=()
 '''
     if cross:
-        chroot = chroot.lstrip('/')
+        chroot = chroot.strip('/')
         includes = f'-I/usr/{hostspec}/usr/include -I/{chroot}/usr/include'
         libs = f'-L/usr/{hostspec}/lib -L/{chroot}/usr/lib'
         conf += f'''

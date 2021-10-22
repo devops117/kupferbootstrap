@@ -494,9 +494,10 @@ def build_package(
 
     setup_sources(package, build_root)
     for chroot in chroots:
+        chroot.activate()
+        chroot.mount_pacman_cache()
         chroot.mount_pkgbuilds()
         chroot.mount_packages()
-        chroot.activate()
 
     makepkg_conf_absolute = os.path.join('/', makepkg_conf_path)
     build_cmd = f'cd {package.path} && makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'

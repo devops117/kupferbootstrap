@@ -51,7 +51,7 @@ BASIC_MOUNTS = {
         'options': ['bind'],
     },
     '/etc/resolv.conf': {
-        'src': '/etc/resolv.conf',
+        'src': os.path.realpath('/etc/resolv.conf'),
         'type': None,
         'options': ['bind'],
     },
@@ -106,12 +106,12 @@ def get_base_chroot(arch: Arch, **kwargs) -> Chroot:
 def get_build_chroot(arch: Arch, extra_repos=None, **kwargs) -> Chroot:
     name = build_chroot_name(arch)
     extra_repos = get_kupfer_local(arch).repos if extra_repos is None else extra_repos
-    default = Chroot(name, arch, initialize=False, extra_repos=extra_repos)
+    default = Chroot(name, arch, initialize=False, copy_base=True, extra_repos=extra_repos)
     return get_chroot(name, **kwargs, default=default)
 
 
 def get_device_chroot(name: str, arch: Arch, **kwargs) -> Chroot:
-    default = Chroot(name, arch, initialize=False)
+    default = Chroot(name, arch, initialize=False, copy_base=False)
     return get_chroot(name, **kwargs, default=default)
 
 
@@ -172,12 +172,13 @@ class Chroot:
                 raise Exception(f"Chroot {self.name} is already initialized, this seems like a bug")
             return
 
-        self.deactivate_core()
+        self.deactivate()
 
         if self.copy_base:
-            base_chroot = get_base_chroot(self.arch, initialize=True)
+            base_chroot = get_base_chroot(self.arch)
             if base_chroot == self:
                 raise Exception('base_chroot == self, bailing out. this is a bug')
+            base_chroot.initialize()
             logging.info(f'Copying {base_chroot.name} chroot to {self.name}')
             result = subprocess.run([
                 'rsync',
@@ -255,6 +256,7 @@ class Chroot:
             result = mount(absolute_source, absolute_destination, options=options, fs_type=fs_type, register_unmount=False)
             if result.returncode != 0:
                 raise Exception(f'{self.name}: failed to mount {absolute_source} to {relative_destination}')
+            logging.debug(f'{self.name}: {absolute_source} successfully mounted to {absolute_destination}.')
             self.active_mounts += [relative_destination]
             atexit.register(self.deactivate)
         return absolute_destination
@@ -270,10 +272,8 @@ class Chroot:
 
     def activate(self, fail_if_active: bool = False):
         """mount /dev, /sys and /proc"""
-        if self.active:
-            if fail_if_active:
-                raise Exception(f'chroot {self.name} already active!')
-            return
+        if self.active and fail_if_active:
+            raise Exception(f'chroot {self.name} already active!')
         if not self.initialized:
             self.initialize(fail_if_initialized=False)
         for dst, opts in BASIC_MOUNTS.items():
@@ -283,6 +283,9 @@ class Chroot:
     def deactivate_core(self):
         for dst in BASIC_MOUNTS.keys():
             self.umount(dst)
+        # TODO: so this is a weird one. while the basic bind-mounts get unmounted
+        # additional mounts like crossdirect are intentionally left intact. Is such a chroot still `active` afterwards?
+        self.active = False
 
     def deactivate(self, fail_if_inactive: bool = False):
         if not self.active:
@@ -403,14 +406,14 @@ class Chroot:
             logging.debug('ld-linux.so symlink already exists, skipping for {target_chroot.name}')
 
         # TODO: find proper fix
-        logging.debug('Disabling crossdirect rustc')
-        os.unlink(os.path.join(native_chroot.path, 'usr/lib/crossdirect', target_arch, 'rustc'))
+        rustc = os.path.join(native_chroot.path, 'usr/lib/crossdirect', target_arch, 'rustc')
+        if os.path.exists(rustc):
+            logging.debug('Disabling crossdirect rustc')
+            os.unlink()
 
         os.makedirs(native_mount, exist_ok=True)
         logging.debug(f'Mounting {native_chroot.name} to {native_mount}')
-        result = self.mount(native_chroot, native_mount)
-        if result.returncode != 0:
-            raise Exception(f'Failed to mount native chroot {native_chroot.name} to {native_mount}')
+        self.mount(native_chroot.path, 'native')
         return native_mount
 
     def mount_pkgbuilds(self, fail_if_mounted: bool = False) -> str:
@@ -418,7 +421,7 @@ class Chroot:
         return self.mount(absolute_source=packages, relative_destination=packages.lstrip('/'), fail_if_mounted=fail_if_mounted)
 
     def mount_pacman_cache(self, fail_if_mounted: bool = False) -> str:
-        return self.mount(os.path.join(config.get_path('pacman'), self.arch), 'var/cache/pacman', fail_if_mounted=fail_if_mounted)
+        return self.mount(os.path.join(config.get_path('pacman'), self.arch), 'var/cache/pacman/pkg', fail_if_mounted=fail_if_mounted)
 
     def mount_packages(self, fail_if_mounted: bool = False) -> str:
         packages = config.get_path('packages')
