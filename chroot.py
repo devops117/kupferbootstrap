@@ -84,6 +84,7 @@ def get_chroot(
 ) -> Chroot:
     global chroots
     if default and name not in chroots:
+        logging.debug(f'Adding chroot {name} to chroot map')
         chroots[name] = default
     elif fail_if_exists:
         raise Exception(f'chroot {name} already exists')
@@ -148,6 +149,7 @@ class Chroot:
         self.path = os.path.join(config.get_path('chroots'), name) if not path_override else path_override
         self.copy_base = copy_base
         self.extra_repos |= extra_repos
+        self.base_packages = base_packages
         if initialize:
             self.initialize()
 
@@ -233,6 +235,7 @@ class Chroot:
         ])
         if result.returncode != 0:
             raise Exception(f'Failed to initialize chroot "{self.name}"')
+        self.initialized = True
 
     def mount(
         self,
@@ -249,7 +252,7 @@ class Chroot:
         if os.path.ismount(absolute_destination):
             if fail_if_mounted:
                 raise Exception(f'{self.name}: {absolute_destination} is already mounted')
-            logging.warning(f'{self.name}: {absolute_destination} already mounted. Skipping.')
+            logging.debug(f'{self.name}: {absolute_destination} already mounted. Skipping.')
         else:
             if makedir and os.path.isdir(absolute_source):
                 os.makedirs(absolute_destination, exist_ok=True)
@@ -307,8 +310,10 @@ class Chroot:
                 inner_env: dict[str, str] = {},
                 outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
                 attach_tty: str = False,
-                capture_output: str = False) -> subprocess.CompletedProcess:
-        self.activate()
+                capture_output: str = False,
+                fail_inactive: bool = True) -> subprocess.CompletedProcess:
+        if not self.active and fail_inactive:
+            raise Exception(f'Chroot {self.name} is inactive, not running command! Hint: pass `fail_inactive=False`')
         if outer_env is None:
             outer_env = os.environ.copy()
         env_cmd = ['/usr/bin/env'] + [f'{shell_quote(key)}={shell_quote(value)}' for key, value in inner_env.items()]
@@ -409,7 +414,7 @@ class Chroot:
         rustc = os.path.join(native_chroot.path, 'usr/lib/crossdirect', target_arch, 'rustc')
         if os.path.exists(rustc):
             logging.debug('Disabling crossdirect rustc')
-            os.unlink()
+            os.unlink(rustc)
 
         os.makedirs(native_mount, exist_ok=True)
         logging.debug(f'Mounting {native_chroot.name} to {native_mount}')
@@ -417,11 +422,15 @@ class Chroot:
         return native_mount
 
     def mount_pkgbuilds(self, fail_if_mounted: bool = False) -> str:
-        packages = config.get_path('pkgbuilds')
-        return self.mount(absolute_source=packages, relative_destination=packages.lstrip('/'), fail_if_mounted=fail_if_mounted)
+        pkgbuilds = config.get_path('pkgbuilds')
+        return self.mount(absolute_source=pkgbuilds, relative_destination=pkgbuilds.lstrip('/'), fail_if_mounted=fail_if_mounted)
 
     def mount_pacman_cache(self, fail_if_mounted: bool = False) -> str:
-        return self.mount(os.path.join(config.get_path('pacman'), self.arch), 'var/cache/pacman/pkg', fail_if_mounted=fail_if_mounted)
+        arch_cache = os.path.join(config.get_path('pacman'), self.arch)
+        rel_target = os.path.join('var/cache/pacman', self.arch)
+        for dir in [arch_cache, self.get_path(rel_target)]:
+            os.makedirs(dir, exist_ok=True)
+        return self.mount(arch_cache, rel_target, fail_if_mounted=fail_if_mounted)
 
     def mount_packages(self, fail_if_mounted: bool = False) -> str:
         packages = config.get_path('packages')
