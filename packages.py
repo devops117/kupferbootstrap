@@ -414,19 +414,13 @@ def setup_build_chroot(arch: Arch, extra_packages: list[str] = [], clean_chroot:
 def setup_sources(package: Package, chroot: Chroot, pkgbuilds_dir: str = None):
     pkgbuilds_dir = pkgbuilds_dir if pkgbuilds_dir else config.get_path('pkgbuilds')
     makepkg_setup_args = [
-        '--config',
-        os.path.join(chroot.path, 'etc/makepkg.conf'),
         '--nobuild',
         '--holdver',
         '--nodeps',
     ]
 
     logging.info(f'Setting up sources for {package.path} in {chroot.name}')
-    result = subprocess.run(
-        [os.path.join(chroot.path, 'usr/bin/makepkg')] + makepkg_cmd[1:] + makepkg_setup_args,
-        env=makepkg_cross_env | {'PACMAN_CHROOT': chroot.path},
-        cwd=os.path.join(pkgbuilds_dir, package.path),
-    )
+    result = chroot.run_cmd(makepkg_cmd + makepkg_setup_args, cwd=package.path)
     if result.returncode != 0:
         raise Exception(f'Failed to check sources for {package.path}')
 
@@ -493,9 +487,9 @@ def build_package(
     setup_sources(package, build_root)
 
     makepkg_conf_absolute = os.path.join('/', makepkg_conf_path)
-    build_cmd = f'cd {package.path} && makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
+    build_cmd = f'makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
     logging.debug(f'Building: Running {build_cmd}')
-    result = build_root.run_cmd(build_cmd, inner_env=env)
+    result = build_root.run_cmd(build_cmd, inner_env=env, cwd=package.path)
 
     if result.returncode != 0:
         raise Exception(f'Failed to compile package {package.path}')

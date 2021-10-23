@@ -311,6 +311,7 @@ class Chroot:
                 outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
                 attach_tty: str = False,
                 capture_output: str = False,
+                cwd: str = None,
                 fail_inactive: bool = True) -> subprocess.CompletedProcess:
         if not self.active and fail_inactive:
             raise Exception(f'Chroot {self.name} is inactive, not running command! Hint: pass `fail_inactive=False`')
@@ -326,6 +327,8 @@ class Chroot:
 
         if not isinstance(script, str) and isinstance(script, list):
             script = ' '.join(script)
+        if cwd:
+            script = f"cd {shell_quote(cwd)} && ( {script} )"
         cmd = ['chroot', self.path] + env_cmd + [
             '/bin/bash',
             '-c',
