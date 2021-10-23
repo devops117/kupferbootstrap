@@ -7,7 +7,7 @@ import subprocess
 from copy import deepcopy
 from joblib import Parallel, delayed
 
-from constants import REPOSITORIES, CROSSDIRECT_PKGS, GCC_HOSTSPECS, ARCHES, Arch
+from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch
 from config import config
 from chroot import get_build_chroot, Chroot
 from distro import get_kupfer_local
@@ -359,9 +359,7 @@ def add_package_to_repo(package: Package, arch: Arch):
 
 
 def check_package_version_built(package: Package, arch: Arch) -> bool:
-    #chroot = Chroot(name='rootfs', arch=config.runtime['arch'], copy_base=False, initialize=False)
     native_chroot = setup_build_chroot(config.runtime['arch'])
-    #config_path = os.path.join(native_chroot.path,
     config_path = '/' + native_chroot.write_makepkg_conf(
         target_arch=arch,
         cross_chroot_relative=os.path.join('chroot', arch),
@@ -493,11 +491,6 @@ def build_package(
             logging.debug(('Building for native arch. ' if not foreign_arch else '') + 'Skipping crossdirect.')
 
     setup_sources(package, build_root)
-    for chroot in chroots:
-        chroot.activate()
-        chroot.mount_pacman_cache()
-        chroot.mount_pkgbuilds()
-        chroot.mount_packages()
 
     makepkg_conf_absolute = os.path.join('/', makepkg_conf_path)
     build_cmd = f'cd {package.path} && makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
@@ -615,6 +608,7 @@ def build(paths: list[str], force: bool, arch: Arch):
     native = config.runtime['arch']
     if arch != native:
         # build qemu-user, binfmt, crossdirect
+        chroot = setup_build_chroot(native)
         build_packages_by_paths(
             ['cross/' + pkg for pkg in CROSSDIRECT_PKGS],
             native,
@@ -623,8 +617,7 @@ def build(paths: list[str], force: bool, arch: Arch):
             enable_crossdirect=False,
             enable_ccache=False,
         )
-
-        subprocess.run(['pacman', '-Syy', '--noconfirm', '--needed'] + CROSSDIRECT_PKGS)
+        subprocess.run(['pacman', '-Syy', '--noconfirm', '--needed', '--config', os.path.join(chroot.path, 'etc/pacman.conf')] + QEMU_BINFMT_PKGS)
         binfmt_register(arch)
 
     return build_packages_by_paths(
