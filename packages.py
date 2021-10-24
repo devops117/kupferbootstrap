@@ -117,10 +117,11 @@ def clone_pkbuilds(pkgbuilds_dir: str, repo_url: str, branch: str, interactive=F
                 if result.returncode != 0:
                     raise Exception('failed switching branches')
         if interactive:
-            if click.confirm('Would you like to try updating the PKGBUILDs repo?'):
-                result = git(['pull'], pkgbuilds_dir)
-                if result.returncode != 0:
-                    raise Exception('failed to update pkgbuilds')
+            if not click.confirm('Would you like to try updating the PKGBUILDs repo?'):
+                return
+        result = git(['pull'], pkgbuilds_dir)
+        if result.returncode != 0:
+            raise Exception('failed to update pkgbuilds')
 
 
 def init_pkgbuilds(interactive=False):
