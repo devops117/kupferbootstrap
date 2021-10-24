@@ -334,6 +334,18 @@ class ConfigStateHolder:
         self.invalidate_profile_cache()
 
 
+def list_to_comma_str(str_list: list[str], default='') -> str:
+    if str_list is None:
+        return default
+    return ','.join(str_list)
+
+
+def comma_str_to_list(s: str, default=None) -> list[str]:
+    if not s:
+        return default
+    return [a for a in s.split(',') if a]
+
+
 def prompt_config(
     text: str,
     default: any,
@@ -350,16 +362,6 @@ def prompt_config(
         """returns true if the value is truthy or int(0)"""
         zero = 0  # compiler complains about 'is with literal' otherwise
         return to_check or to_check is zero  # can't do == due to boolean<->int casting
-
-    def list_to_comma_str(str_list: list[str], default='') -> str:
-        if str_list is None:
-            return default
-        return ','.join(str_list)
-
-    def comma_str_to_list(s: str, default=None) -> list[str]:
-        if not s:
-            return default
-        return [a for a in s.split(',') if a]
 
     if type(None) == field_type:
         field_type = str
@@ -504,13 +506,19 @@ def cmd_config_set(key_vals: list[str], non_interactive: bool = False, noop: boo
         split_pair = pair.split('=')
         if len(split_pair) == 2:
             key, value = split_pair
+            value_type = type(config_dot_name_get(key, CONFIG_DEFAULTS))
+            if value_type != list:
+                value = click.types.convert_type(value_type)(value)
+            else:
+                value = comma_str_to_list(value, default=[])
         elif len(split_pair) == 1 and not non_interactive:
             key = split_pair[0]
             value_type = type(config_dot_name_get(key, CONFIG_DEFAULTS))
             current = config_dot_name_get(key, config.file)
-            value, _ = prompt_config(text=key, default=current, field_type=value_type)
+            value, _ = prompt_config(text=key, default=current, field_type=value_type, echo_changes=False)
         else:
             raise Exception(f'Invalid key=value pair "{pair}"')
+        print('%s = %s' % (key, value))
         config_dot_name_set(key, value, config_copy)
         if merge_configs(config_copy, warn_missing_defaultprofile=False) != config_copy:
             raise Exception('Config "{key}" = "{value}" failed to evaluate')
@@ -529,7 +537,7 @@ def cmd_config_get(keys: list[str]):
         print(config_dot_name_get(keys[0], config.file))
         return
     for key in keys:
-        print('%s = %s', key, config_dot_name_get(key, config.file))
+        print('%s = %s' % (key, config_dot_name_get(key, config.file)))
 
 
 @cmd_config.group(name='profile')
