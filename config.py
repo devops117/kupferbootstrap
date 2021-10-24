@@ -523,7 +523,7 @@ def cmd_config_set(key_vals: list[str], non_interactive: bool = False, noop: boo
         if merge_configs(config_copy, warn_missing_defaultprofile=False) != config_copy:
             raise Exception('Config "{key}" = "{value}" failed to evaluate')
     if not noop:
-        if not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
+        if not non_interactive and not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
             return
         config.update(config_copy)
         config.write()
