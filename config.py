@@ -499,7 +499,10 @@ def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool
 @noop_flag
 @click.argument('key_vals', nargs=-1)
 def cmd_config_set(key_vals: list[str], non_interactive: bool = False, noop: bool = False):
-    """set config entries as `key=value` pairs, like `set build.clean_mode=false`"""
+    """
+    Set config entries. Pass entries as `key=value` pairs, with keys as dot-separated identifiers,
+    like `build.clean_mode=false` or alternatively just keys to get prompted if run interactively.
+    """
     config.enforce_config_loaded()
     config_copy = deepcopy(config.file)
     for pair in key_vals:
@@ -532,7 +535,8 @@ def cmd_config_set(key_vals: list[str], non_interactive: bool = False, noop: boo
 @cmd_config.command(name='get')
 @click.argument('keys', nargs=-1)
 def cmd_config_get(keys: list[str]):
-    """get config entries, passed as `key=value` pairs, like `build.clean_mode`"""
+    """Get config entries.
+    Get entries for keys passed as dot-separated identifiers, like `build.clean_mode`"""
     if len(keys) == 1:
         print(config_dot_name_get(keys[0], config.file))
         return
