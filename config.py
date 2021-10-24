@@ -28,6 +28,7 @@ PROFILE_EMPTY: Profile = {key: None for key in PROFILE_DEFAULTS.keys()}
 CONFIG_DEFAULTS = {
     'build': {
         'ccache': True,
+        'clean_mode': True,
         'crosscompile': True,
         'crossdirect': True,
         'threads': 0,

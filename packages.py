@@ -399,9 +399,7 @@ def setup_build_chroot(arch: Arch, extra_packages: list[str] = [], clean_chroot:
         extra_repos=get_kupfer_local(arch).repos,
     )
     logging.info(f'Initializing {arch} build chroot')
-    if clean_chroot:
-        chroot.reset()
-    chroot.initialize()
+    chroot.initialize(reset=clean_chroot)
     chroot.activate()
     chroot.mount_pacman_cache()
     chroot.mount_pkgbuilds()
@@ -448,9 +446,7 @@ def build_package(
         extra_packages=['base-devel'] + CROSSDIRECT_PKGS,
         clean_chroot=clean_chroot,
     )
-
     cross = foreign_arch and package.mode == 'cross' and enable_crosscompile
-    chroots = set([target_chroot, native_chroot])
 
     if cross:
         logging.info(f'Cross-compiling {package.path}')
@@ -522,6 +518,7 @@ def build_packages(
     enable_crosscompile: bool = True,
     enable_crossdirect: bool = True,
     enable_ccache: bool = True,
+    clean_chroot: bool = False,
 ):
     build_levels = get_unbuilt_package_levels(repo, packages, arch, force=force)
 
@@ -539,6 +536,7 @@ def build_packages(
                 enable_crosscompile=enable_crosscompile,
                 enable_crossdirect=enable_crossdirect,
                 enable_ccache=enable_ccache,
+                clean_chroot=clean_chroot,
             )
             files += add_package_to_repo(package, arch)
     return files
@@ -552,6 +550,7 @@ def build_packages_by_paths(
     enable_crosscompile: bool = True,
     enable_crossdirect: bool = True,
     enable_ccache: bool = True,
+    clean_chroot: bool = False,
 ):
     if isinstance(paths, str):
         paths = [paths]
@@ -567,6 +566,7 @@ def build_packages_by_paths(
         enable_crosscompile=enable_crosscompile,
         enable_crossdirect=enable_crossdirect,
         enable_ccache=enable_ccache,
+        clean_chroot=clean_chroot,
     )
 
 
@@ -622,6 +622,7 @@ def build(paths: list[str], force: bool, arch: Arch):
         enable_crosscompile=config.file['build']['crosscompile'],
         enable_crossdirect=config.file['build']['crossdirect'],
         enable_ccache=config.file['build']['ccache'],
+        clean_chroot=config.file['build']['clean_mode'],
     )
 
 

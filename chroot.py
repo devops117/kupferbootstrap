@@ -3,6 +3,9 @@ import logging
 import subprocess
 import os
 import atexit
+from glob import glob
+from shutil import rmtree
+
 from config import config
 from distro import get_base_distro, RepoInfo
 from shlex import quote as shell_quote
@@ -10,7 +13,6 @@ from utils import mount, umount
 from distro import get_kupfer_local
 from wrapper import enforce_wrap
 from constants import Arch, GCC_HOSTSPECS, CROSSDIRECT_PKGS
-from glob import glob
 from generator import generate_makepkg_conf
 
 BIND_BUILD_DIRS = 'BINDBUILDDIRS'
@@ -163,12 +165,12 @@ class Chroot:
 
     def initialize(
         self,
+        reset: bool = False,
         fail_if_initialized: bool = False,
     ):
-        base_distro = get_base_distro(self.arch)
         pacman_conf_target = self.get_path('etc/pacman.conf')
 
-        if self.initialized:
+        if self.initialized and not reset:
             # chroot must have been initialized already!
             if fail_if_initialized:
                 raise Exception(f"Chroot {self.name} is already initialized, this seems like a bug")
@@ -177,27 +179,35 @@ class Chroot:
         self.deactivate()
 
         if self.copy_base:
-            base_chroot = get_base_chroot(self.arch)
-            if base_chroot == self:
-                raise Exception('base_chroot == self, bailing out. this is a bug')
-            base_chroot.initialize()
-            logging.info(f'Copying {base_chroot.name} chroot to {self.name}')
-            result = subprocess.run([
-                'rsync',
-                '-a',
-                '--delete',
-                '-q',
-                '-W',
-                '-x',
-                '--exclude',
-                'pkgbuilds',
-                '--exclude',
-                'prebuilts',
-                f'{base_chroot.path}/',
-                f'{self.path}/',
-            ])
-            if result.returncode != 0:
-                raise Exception(f'Failed to copy {base_chroot.name} to {self.name}')
+            if reset or not os.path.exists(self.get_path('usr/bin')):
+                base_chroot = get_base_chroot(self.arch)
+                if base_chroot == self:
+                    raise Exception('base_chroot == self, bailing out. this is a bug')
+                base_chroot.initialize()
+                logging.info(f'Copying {base_chroot.name} chroot to {self.name}')
+                result = subprocess.run([
+                    'rsync',
+                    '-a',
+                    '--delete',
+                    '-q',
+                    '-W',
+                    '-x',
+                    '--exclude',
+                    'pkgbuilds',
+                    '--exclude',
+                    'prebuilts',
+                    f'{base_chroot.path}/',
+                    f'{self.path}/',
+                ])
+                if result.returncode != 0:
+                    raise Exception(f'Failed to copy {base_chroot.name} to {self.name}')
+                self.write_pacman_conf()
+                self.activate()
+                self.try_install_packages(self.base_packages, refresh=True, allow_fail=False)
+                self.deactivate()
+            else:
+                logging.debug(f'{self.name}: Reusing existing installation')
+                self.write_pacman_conf()
 
             # patch makepkg
             with open(self.get_path('/usr/bin/makepkg'), 'r') as file:
@@ -207,34 +217,33 @@ class Chroot:
                 file.write(data)
 
             # configure makepkg
-            data = generate_makepkg_conf(self.arch, cross=False)
-            data = data.replace('xz -c', 'xz -T0 -c')
-            data = data.replace(' check ', ' !check ')
-            with open(self.get_path('/etc/makepkg.conf'), 'w') as file:
-                file.write(data)
+            self.write_makepkg_conf(self.arch, cross_chroot_relative=None, cross=False)
+        else:
+            # base chroot
+            if reset:
+                logging.info(f'Resetting {self.name}')
+                for dir in glob(os.join(self.path, '*')):
+                    rmtree(dir)
 
-        os.makedirs(self.get_path('/etc'), exist_ok=True)
+            self.write_pacman_conf()
 
-        conf_text = base_distro.get_pacman_conf(self.extra_repos)
-        with open(pacman_conf_target, 'w') as file:
-            file.write(conf_text)
+            logging.info(f'Pacstrapping chroot {self.name}: {", ".join(self.base_packages)}')
 
-        logging.info(f'Installing packages to {self.name}: {", ".join(self.base_packages)}')
+            result = subprocess.run([
+                'pacstrap',
+                '-C',
+                pacman_conf_target,
+                '-c',
+                '-G',
+                self.path,
+            ] + self.base_packages + [
+                '--needed',
+                '--overwrite=*',
+                '-yyuu',
+            ])
+            if result.returncode != 0:
+                raise Exception(f'Failed to initialize chroot "{self.name}"')
 
-        result = subprocess.run([
-            'pacstrap',
-            '-C',
-            pacman_conf_target,
-            '-c',
-            '-G',
-            self.path,
-        ] + self.base_packages + [
-            '--needed',
-            '--overwrite=*',
-            '-yyuu',
-        ])
-        if result.returncode != 0:
-            raise Exception(f'Failed to initialize chroot "{self.name}"')
         self.initialized = True
 
     def mount(
@@ -300,10 +309,6 @@ class Chroot:
             self.umount(mount)
         self.umount('proc')
         self.active = False
-
-    def reset(self):
-        self.initialized = False
-        self.initialize()
 
     def run_cmd(self,
                 script: str,
@@ -457,6 +462,12 @@ class Chroot:
         with open(makepkg_conf_path, 'w') as f:
             f.write(makepkg_cross_conf)
         return makepkg_conf_path_relative
+
+    def write_pacman_conf(self):
+        os.makedirs(self.get_path('/etc'), exist_ok=True)
+        conf_text = get_base_distro(self.arch).get_pacman_conf(self.extra_repos)
+        with open(self.get_path('etc/pacman.conf'), 'w') as file:
+            file.write(conf_text)
 
 
 @click.command('chroot')
