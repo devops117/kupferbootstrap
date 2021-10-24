@@ -182,7 +182,7 @@ def merge_configs(conf_new: dict[str, dict], conf_base={}, warn_missing_defaultp
                 # handle generic inner config dict
                 for inner_name, inner_conf in outer_conf.items():
                     if inner_name not in CONFIG_DEFAULTS[outer_name].keys():
-                        logging.warning(f'Skipped unknown config item "{key}" in "{inner_name}"')
+                        logging.warning(f'Skipped unknown config item "{inner_name}" in "{outer_name}"')
                         continue
                     parsed[outer_name][inner_name] = inner_conf
 
@@ -274,10 +274,9 @@ class ConfigStateHolder:
             raise ConfigLoadException(Exception("Config file wasn't even parsed yet. This is probably a bug in kupferbootstrap :O"))
         ex = self.file_state.exception
         if ex:
-            msg = ''
             if type(ex) == FileNotFoundError:
-                msg = "File doesn't exist. Try running `kupferbootstrap config init` first?"
-            raise ConfigLoadException(extra_msg=msg, inner_exception=ex)
+                ex = Exception("File doesn't exist. Try running `kupferbootstrap config init` first?")
+            raise ex
 
     def get_profile(self, name: str = None) -> Profile:
         if not name:
