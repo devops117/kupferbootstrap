@@ -308,10 +308,14 @@ class ConfigStateHolder:
         """Clear the profile cache (usually after modification)"""
         self._profile_cache = None
 
-    def update(self, config_fragment: dict[str, dict], warn_missing_defaultprofile: bool = True):
-        if 'profiles' in config_fragment and self.file['profiles'] != config_fragment['profiles']:
+    def update(self, config_fragment: dict[str, dict], warn_missing_defaultprofile: bool = True) -> bool:
+        """Update `self.file` with `config_fragment`. Returns `True` if the config was changed"""
+        merged = merge_configs(config_fragment, conf_base=self.file, warn_missing_defaultprofile=warn_missing_defaultprofile)
+        changed = self.file != merged
+        self.file = merged
+        if changed and 'profiles' in config_fragment and self.file['profiles'] != config_fragment['profiles']:
             self.invalidate_profile_cache()
-        self.file = merge_configs(config_fragment, conf_base=self.file, warn_missing_defaultprofile=warn_missing_defaultprofile)
+        return changed
 
     def update_profile(self, name: str, profile: dict, merge: bool = False, create: bool = True, prune: bool = True):
         new = {}
@@ -403,6 +407,28 @@ def prompt_profile(name: str, create: bool = True, defaults: Profile = {}) -> (P
     return profile, changed
 
 
+def config_dot_name_get(name: str, config: dict[str, any], prefix: str = ''):
+    if not isinstance(config, dict):
+        raise Exception(f"Couldn't resolve config name: passed config is not a dict: {repr(config)}")
+    split_name = name.split('.')
+    name = split_name[0]
+    if name not in config:
+        raise Exception(f"Couldn't resolve config name: key {prefix + name} not found")
+    value = config[name]
+    if len(split_name) == 1:
+        return value
+    else:
+        rest_name = '.'.join(split_name[1:])
+        return config_dot_name_get(name=rest_name, config=value, prefix=prefix + name + '.')
+
+
+def config_dot_name_set(name: str, value: any, config: dict[str, any]):
+    split_name = name.split('.')
+    if len(split_name) > 1:
+        config = config_dot_name_get('.'.join(split_name[:-1]), config)
+    config[split_name[-1]] = value
+
+
 config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
 
 config_option = click.option(
@@ -464,6 +490,46 @@ def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool
         config.write()
     else:
         logging.info(f'--noop passed, not writing to {config.runtime["config_file"]}!')
+
+
+@cmd_config.command(name='set')
+@noninteractive_flag
+@noop_flag
+@click.argument('key_vals', nargs=-1)
+def cmd_config_set(key_vals: list[str], non_interactive: bool = False, noop: bool = False):
+    """set config entries as `key=value` pairs, like `set build.clean_mode=false`"""
+    config.enforce_config_loaded()
+    config_copy = deepcopy(config.file)
+    for pair in key_vals:
+        split_pair = pair.split('=')
+        if len(split_pair) == 2:
+            key, value = split_pair
+        elif len(split_pair) == 1 and not non_interactive:
+            key = split_pair[0]
+            value_type = type(config_dot_name_get(key, CONFIG_DEFAULTS))
+            current = config_dot_name_get(key, config.file)
+            value, _ = prompt_config(text=key, default=current, field_type=value_type)
+        else:
+            raise Exception(f'Invalid key=value pair "{pair}"')
+        config_dot_name_set(key, value, config_copy)
+        if merge_configs(config_copy, warn_missing_defaultprofile=False) != config_copy:
+            raise Exception('Config "{key}" = "{value}" failed to evaluate')
+    if not noop:
+        if not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
+            return
+        config.update(config_copy)
+        config.write()
+
+
+@cmd_config.command(name='get')
+@click.argument('keys', nargs=-1)
+def cmd_config_get(keys: list[str]):
+    """get config entries, passed as `key=value` pairs, like `build.clean_mode`"""
+    if len(keys) == 1:
+        print(config_dot_name_get(keys[0], config.file))
+        return
+    for key in keys:
+        print('%s = %s', key, config_dot_name_get(key, config.file))
 
 
 @cmd_config.group(name='profile')
