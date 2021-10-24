@@ -418,7 +418,7 @@ def cmd_config():
     pass
 
 
-noninteractive_flag = click.option('--non-interactive', is_flag=True)
+noninteractive_flag = click.option('-N', '--non-interactive', is_flag=True)
 noop_flag = click.option('--noop', '-n', help="Don't write changes to file", is_flag=True)
 
 
