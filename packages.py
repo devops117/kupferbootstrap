@@ -305,7 +305,7 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
 
 def add_file_to_repo(file_path: str, repo_name: str, arch: Arch):
     repo_dir = os.path.join(config.get_package_dir(arch), repo_name)
-    pacman_cache_dir = os.path.join(config.get_path('pacman'))
+    pacman_cache_dir = os.path.join(config.get_path('pacman'), arch)
     file_name = os.path.basename(file_path)
     target_file = os.path.join(repo_dir, file_name)
 
