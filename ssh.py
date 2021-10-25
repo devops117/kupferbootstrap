@@ -97,5 +97,9 @@ def copy_ssh_keys(root_dir: str, user: str):
 
     with open(authorized_keys_file, 'a') as authorized_keys:
         for key in keys:
-            with open(f'{key}.pub', 'r') as file:
+            pub = f'{key}.pub'
+            if not os.path.exists('pub'):
+                logging.debug(f'Skipping key {key}: {pub} not found')
+                continue
+            with open(pub, 'r') as file:
                 authorized_keys.write(file.read())
