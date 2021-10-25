@@ -1,14 +1,17 @@
 import atexit
-from constants import FLASH_PARTS, LOCATIONS
-from fastboot import fastboot_flash
 import shutil
-from image import dump_bootimg, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name
 import os
 import subprocess
 import click
 import tempfile
+
+from constants import FLASH_PARTS, LOCATIONS
+from fastboot import fastboot_flash
+from chroot import get_device_chroot
+from image import dump_bootimg, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name, get_image_path
 from wrapper import enforce_wrap
 from image import resize_fs
+from utils import mount
 
 BOOTIMG = FLASH_PARTS['BOOTIMG']
 LK2ND = FLASH_PARTS['LK2ND']
@@ -17,12 +20,14 @@ ROOTFS = FLASH_PARTS['ROOTFS']
 
 
 @click.command(name='flash')
-@click.argument('what')
-@click.argument('location', required=False)
+@click.argument('what', type=click.Choice(list(FLASH_PARTS.values())))
+@click.argument('location', required=False, type=click.Choice(LOCATIONS))
 def cmd_flash(what, location):
     enforce_wrap()
     device, flavour = get_device_and_flavour()
-    image_name = get_image_name(device, flavour)
+    chroot = get_device_chroot(device, flavour, 'aarch64')
+    device_image_name = get_image_name(chroot)
+    device_image_path = get_image_path(chroot)
 
     if what not in FLASH_PARTS.values():
         raise Exception(f'Unknown what "{what}", must be one of {", ".join(FLASH_PARTS.values())}')
@@ -49,40 +54,24 @@ def cmd_flash(what, location):
         if path == '':
             raise Exception('Unable to discover Jumpdrive')
 
-        image_dir = tempfile.gettempdir()
-        image_path = os.path.join(image_dir, f'minimal-{image_name}')
+        minimal_image_dir = tempfile.gettempdir()
+        minimal_image_path = os.path.join(minimal_image_dir, f'minimal-{device_image_name}')
 
         def clean_dir():
-            shutil.rmtree(image_dir)
+            shutil.rmtree(minimal_image_dir)
 
         atexit.register(clean_dir)
 
-        shutil.copyfile(image_name, image_path)
+        shutil.copyfile(device_image_path, minimal_image_path)
 
-        resize_fs(image_path, shrink=True)
+        resize_fs(minimal_image_path, shrink=True)
 
         if location.endswith('-file'):
             part_mount = '/mnt/kupfer/fs'
             if not os.path.exists(part_mount):
                 os.makedirs(part_mount)
 
-            def umount():
-                subprocess.run(
-                    [
-                        'umount',
-                        '-lc',
-                        part_mount,
-                    ],
-                    stderr=subprocess.DEVNULL,
-                )
-
-            atexit.register(umount)
-
-            result = subprocess.run([
-                'mount',
-                path,
-                part_mount,
-            ])
+            result = mount(path, part_mount, options=[])
             if result.returncode != 0:
                 raise Exception(f'Failed to mount {path} to {part_mount}')
 
@@ -97,7 +86,7 @@ def cmd_flash(what, location):
                 '--partial',
                 '--progress',
                 '--human-readable',
-                image_path,
+                minimal_image_path,
                 os.path.join(dir, 'kupfer.img'),
             ])
             if result.returncode != 0:
@@ -105,7 +94,7 @@ def cmd_flash(what, location):
         else:
             result = subprocess.run([
                 'dd',
-                f'if={image_path}',
+                f'if={minimal_image_path}',
                 f'of={path}',
                 'bs=20M',
                 'iflag=direct',
@@ -114,16 +103,16 @@ def cmd_flash(what, location):
                 'conv=sync,noerror',
             ])
             if result.returncode != 0:
-                raise Exception(f'Failed to flash {image_path} to {path}')
+                raise Exception(f'Failed to flash {minimal_image_path} to {path}')
 
     elif what == BOOTIMG:
-        path = dump_bootimg(image_name)
+        path = dump_bootimg(device_image_path)
         fastboot_flash('boot', path)
     elif what == LK2ND:
-        path = dump_lk2nd(image_name)
+        path = dump_lk2nd(device_image_path)
         fastboot_flash('lk2nd', path)
     elif what == QHYPSTUB:
-        path = dump_qhypstub(image_name)
+        path = dump_qhypstub(device_image_path)
         fastboot_flash('qhypstub', path)
     else:
         raise Exception(f'Unknown what "{what}", this must be a bug in kupferbootstrap!')
