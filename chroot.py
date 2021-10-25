@@ -12,7 +12,7 @@ from shlex import quote as shell_quote
 from utils import mount, umount
 from distro import get_kupfer_local
 from wrapper import enforce_wrap
-from constants import Arch, GCC_HOSTSPECS, CROSSDIRECT_PKGS
+from constants import Arch, GCC_HOSTSPECS, CROSSDIRECT_PKGS, BASE_PACKAGES
 from generator import generate_makepkg_conf
 
 BIND_BUILD_DIRS = 'BINDBUILDDIRS'
@@ -118,8 +118,9 @@ def get_build_chroot(arch: Arch, extra_repos=None, **kwargs) -> Chroot:
     return get_chroot(name, **kwargs, default=default)
 
 
-def get_device_chroot(name: str, arch: Arch, **kwargs) -> Chroot:
-    default = Chroot(name, arch, initialize=False, copy_base=False)
+def get_device_chroot(device: str, flavour: str, arch: Arch, packages: list[str] = BASE_PACKAGES, extra_repos={}, **kwargs) -> Chroot:
+    name = f'rootfs_{device}-{flavour}'
+    default = Chroot(name, arch, initialize=False, copy_base=False, base_packages=packages, extra_repos=extra_repos)
     return get_chroot(name, **kwargs, default=default)
 
 
