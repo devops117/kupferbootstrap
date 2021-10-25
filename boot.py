@@ -15,7 +15,7 @@ TYPES = [LK2ND, JUMPDRIVE, BOOTIMG]
 
 
 @click.command(name='boot')
-@click.argument('type', required=False, default=BOOTIMG)
+@click.argument('type', required=False, default=BOOTIMG, type=click.Choice(TYPES))
 def cmd_boot(type):
     f"""Flash one of {', '.join(TYPES)}"""
     enforce_wrap()
