@@ -195,7 +195,8 @@ def cmd_build():
 
 
 @cmd_image.command(name='inspect')
-def cmd_inspect():
+@click.option('--shell', '-s', is_flag=True)
+def cmd_inspect(shell: bool = False):
     device, flavour = get_device_and_flavour()
     image_name = get_image_name(device, flavour)
 
@@ -204,4 +205,9 @@ def cmd_inspect():
 
     logging.info(f'Inspect the rootfs image at {rootfs_mount}')
 
-    pause()
+    if shell:
+        chroot.initialized = True
+        chroot.activate()
+        chroot.run_cmd('/bin/bash')
+    else:
+        pause()
