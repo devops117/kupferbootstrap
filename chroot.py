@@ -395,6 +395,22 @@ class Chroot:
                 results[pkg] = self.run_cmd(f'{cmd} {pkg}')
         return results
 
+    def mount_rootfs(self, source_path: str, fs_type: str = None, options: list[str] = ['loop'], allow_overlay: bool = False):
+        if self.active:
+            raise Exception(f'{self.name}: Chroot is marked as active, not mounting a rootfs over it.')
+        if not os.path.exists(source_path):
+            raise Exception('Source does not exist')
+        if not allow_overlay:
+            if self.active_mounts:
+                raise Exception(f'{self.name}: Chroot has submounts active: {self.active_mounts}')
+            if os.path.ismount(self.path):
+                raise Exception(f'{self.name}: There is already something mounted at {self.path}, not mounting over it.')
+            if os.path.exists(os.path.join(self.path, 'usr/bin')):
+                raise Exception(f'{self.name}: {self.path}/usr/bin exists, not mounting over existing rootfs.')
+        os.makedirs(self.path, exist_ok=True)
+        atexit.register(self.deactivate)
+        self.mount(source_path, '/', fs_type=fs_type, options=options)
+
     def mount_crossdirect(self, native_chroot: Chroot = None):
         """
         mount `native_chroot` at `target_chroot`/native
