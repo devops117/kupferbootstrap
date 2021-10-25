@@ -5,7 +5,7 @@ from config import config
 from wrapper import enforce_wrap
 import logging
 
-PATHS = ['chroots', 'pacman', 'jumpdrive', 'packages']
+PATHS = ['chroots', 'pacman', 'jumpdrive', 'packages', 'images']
 
 
 @click.group(name='cache')

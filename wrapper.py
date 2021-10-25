@@ -15,6 +15,7 @@ DOCKER_PATHS = {
     'pacman': '/var/cache/pacman',
     'packages': '/prebuilts',
     'pkgbuilds': '/pkgbuilds',
+    'images': '/images',
 }
 
 
