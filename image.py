@@ -1,10 +1,9 @@
-import atexit
 import os
 import subprocess
 import click
 from logger import logging
-from chroot import Chroot
-from constants import BASE_PACKAGES, DEVICES, FLAVOURS
+from chroot import Chroot, get_device_chroot
+from constants import BASE_PACKAGES, DEVICES, FLAVOURS, Arch
 from config import config
 from distro import get_base_distro, get_kupfer_https, get_kupfer_local
 from ssh import copy_ssh_keys
@@ -33,7 +32,7 @@ def resize_fs(image_path: str, shrink: bool = False):
 
 
 def get_device_and_flavour(profile: str = None) -> tuple[str, str]:
-    #config.enforce_config_loaded()
+    config.enforce_config_loaded()
     profile = config.get_profile(profile)
     if not profile['device']:
         raise Exception("Please set the device using 'kupferbootstrap config init ...'")
@@ -44,43 +43,19 @@ def get_device_and_flavour(profile: str = None) -> tuple[str, str]:
     return (profile['device'], profile['flavour'])
 
 
-def get_image_name(device, flavour) -> str:
-    return f'{device}-{flavour}-rootfs.img'
+def get_image_name(device_chroot: Chroot) -> str:
+    return f'{device_chroot.name}.img'
 
 
-def mount_rootfs_image(image_path, mount_path):
-    if not os.path.exists(mount_path):
-        os.makedirs(mount_path)
-
-    def umount():
-        subprocess.run(
-            [
-                'umount',
-                '-lc',
-                mount_path,
-            ],
-            stderr=subprocess.DEVNULL,
-        )
-
-    atexit.register(umount)
-
-    result = subprocess.run([
-        'mount',
-        '-o',
-        'loop',
-        image_path,
-        mount_path,
-    ])
-    if result.returncode != 0:
-        logging.fatal(f'Failed to loop mount {image_path} to {mount_path}')
-        exit(1)
+def get_image_path(device_chroot: Chroot) -> str:
+    return os.path.join(config.get_path('images'), get_image_name(device_chroot))
 
 
-def dump_bootimg(image_name: str) -> str:
+def dump_bootimg(image_path: str) -> str:
     path = '/tmp/boot.img'
     result = subprocess.run([
         'debugfs',
-        image_name,
+        image_path,
         '-R',
         f'dump /boot/boot.img {path}',
     ])
@@ -90,14 +65,14 @@ def dump_bootimg(image_name: str) -> str:
     return path
 
 
-def dump_lk2nd(image_name: str) -> str:
+def dump_lk2nd(image_path: str) -> str:
     """
     This doesn't append the image with the appended DTB which is needed for some devices, so it should get added in the future.
     """
     path = '/tmp/lk2nd.img'
     result = subprocess.run([
         'debugfs',
-        image_name,
+        image_path,
         '-R',
         f'dump /boot/lk2nd.img {path}',
     ])
@@ -107,11 +82,11 @@ def dump_lk2nd(image_name: str) -> str:
     return path
 
 
-def dump_qhypstub(image_name: str) -> str:
+def dump_qhypstub(image_path: str) -> str:
     path = '/tmp/qhypstub.bin'
     result = subprocess.run([
         'debugfs',
-        image_name,
+        image_path,
         '-R',
         f'dump /boot/qhypstub.bin {path}',
     ])
@@ -132,35 +107,9 @@ def cmd_build():
     profile = config.get_profile()
     device, flavour = get_device_and_flavour()
     post_cmds = FLAVOURS[flavour].get('post_cmds', [])
-    image_name = get_image_name(device, flavour)
 
     # TODO: PARSE DEVICE ARCH
-    arch = 'aarch64'
-
-    if not os.path.exists(image_name):
-        result = subprocess.run([
-            'fallocate',
-            '-l',
-            f"{FLAVOURS[flavour].get('size',2)}G",
-            image_name,
-        ])
-        if result.returncode != 0:
-            raise Exception(f'Failed to allocate {image_name}')
-
-        result = subprocess.run([
-            'mkfs.ext4',
-            '-L',
-            'kupfer',
-            image_name,
-        ])
-        if result.returncode != 0:
-            raise Exception(f'Failed to create ext4 filesystem on {image_name}')
-    else:
-        resize_fs(image_path=image_name)
-
-    chroot_name = f'rootfs_{device}-{flavour}'
-    rootfs_mount = get_chroot_path(chroot_name)
-    mount_rootfs_image(image_name, rootfs_mount)
+    arch: Arch = 'aarch64'
 
     packages_dir = config.get_package_dir(arch)
     if os.path.exists(os.path.join(packages_dir, 'main')):
@@ -168,28 +117,47 @@ def cmd_build():
     else:
         extra_repos = get_kupfer_https(arch).repos
     packages = BASE_PACKAGES + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
-    create_chroot(
-        chroot_name,
-        arch=arch,
-        packages=packages,
-        extra_repos=extra_repos,
-        bind_mounts={},
-        chroot_base_path='/chroot',
-    )
-    create_chroot_user(
-        rootfs_mount,
+
+    chroot = get_device_chroot(device=device, flavour=flavour, arch=arch, packages=packages, extra_repos=extra_repos)
+    image_path = get_image_path(chroot)
+
+    if not os.path.exists(image_path):
+        result = subprocess.run([
+            'fallocate',
+            '-l',
+            f"{FLAVOURS[flavour].get('size',2)}G",
+            image_path,
+        ])
+        if result.returncode != 0:
+            raise Exception(f'Failed to allocate {image_path}')
+
+        result = subprocess.run([
+            'mkfs.ext4',
+            '-L',
+            'kupfer',
+            image_path,
+        ])
+        if result.returncode != 0:
+            raise Exception(f'Failed to create ext4 filesystem on {image_path}')
+    else:
+        resize_fs(image_path=image_path)
+
+    chroot.mount_rootfs(image_path)
+    chroot.initialize()
+    chroot.activate()
+    chroot.create_user(
         user=profile['username'],
         password=profile['password'],
     )
 
     copy_ssh_keys(
-        rootfs_mount,
+        chroot.path,
         user=profile['username'],
     )
-    with open(os.path.join(rootfs_mount, 'etc', 'pacman.conf'), 'w') as file:
+    with open(os.path.join(chroot.path, 'etc', 'pacman.conf'), 'w') as file:
         file.write(get_base_distro(arch).get_pacman_conf(check_space=True, extra_repos=get_kupfer_https(arch).repos))
     if post_cmds:
-        result = run_chroot_cmd(' && '.join(post_cmds), rootfs_mount)
+        result = chroot.run_cmd(' && '.join(post_cmds))
         if result.returncode != 0:
             raise Exception('Error running post_cmds')
 
@@ -198,12 +166,14 @@ def cmd_build():
 @click.option('--shell', '-s', is_flag=True)
 def cmd_inspect(shell: bool = False):
     device, flavour = get_device_and_flavour()
-    image_name = get_image_name(device, flavour)
+    # TODO: get arch from profile
+    arch = 'aarch64'
+    chroot = get_device_chroot(device, flavour, arch)
+    image_path = get_image_path(chroot)
 
-    rootfs_mount = get_chroot_path(f'rootfs_{device}-{flavour}')
-    mount_rootfs_image(image_name, rootfs_mount)
+    chroot.mount_rootfs(image_path)
 
-    logging.info(f'Inspect the rootfs image at {rootfs_mount}')
+    logging.info(f'Inspect the rootfs image at {chroot.path}')
 
     if shell:
         chroot.initialized = True
