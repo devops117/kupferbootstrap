@@ -64,6 +64,11 @@ Chroot = None
 chroots: dict[str, Chroot] = {}
 
 
+def make_abs_path(path: str) -> str:
+    """Simply ensures the path string starts with a '/'. Does no disk modifications!"""
+    return '/' + path.lstrip('/')
+
+
 def get_chroot_path(chroot_name, override_basepath: str = None) -> str:
     base_path = config.get_path('chroots') if not override_basepath else override_basepath
     return os.path.join(base_path, chroot_name)
@@ -176,7 +181,8 @@ class Chroot:
                 raise Exception(f"Chroot {self.name} is already initialized, this seems like a bug")
             return
 
-        self.deactivate()
+        active_previously = self.active
+        self.deactivate_core()
 
         if self.copy_base:
             if reset or not os.path.exists(self.get_path('usr/bin')):
@@ -245,6 +251,8 @@ class Chroot:
                 raise Exception(f'Failed to initialize chroot "{self.name}"')
 
         self.initialized = True
+        if active_previously:
+            self.activate()
 
     def mount(
         self,
@@ -267,9 +275,9 @@ class Chroot:
                 os.makedirs(absolute_destination, exist_ok=True)
             result = mount(absolute_source, absolute_destination, options=options, fs_type=fs_type, register_unmount=False)
             if result.returncode != 0:
-                raise Exception(f'{self.name}: failed to mount {absolute_source} to {relative_destination}')
+                raise Exception(f'{self.name}: failed to mount {absolute_source} to {absolute_destination}')
             logging.debug(f'{self.name}: {absolute_source} successfully mounted to {absolute_destination}.')
-            self.active_mounts += [relative_destination]
+            self.active_mounts += [make_abs_path(relative_destination)]
             atexit.register(self.deactivate)
         return absolute_destination
 
@@ -278,9 +286,20 @@ class Chroot:
             return
         path = self.get_path(relative_path)
         result = umount(path)
-        if result.returncode == 0 and relative_path in self.active_mounts:
+        if result.returncode == 0 and make_abs_path(relative_path) in self.active_mounts:
             self.active_mounts.remove(relative_path)
         return result
+
+    def umount_many(self, relative_paths: list[str]):
+        # make sure paths start with '/'. Important: also copies the collection and casts to list, which will be sorted!
+        mounts = [make_abs_path(path) for path in relative_paths]
+        mounts.sort(reverse=True)
+        for mount in mounts:
+            if mount == '/proc':
+                continue
+            self.umount(mount)
+        if '/proc' in mounts:
+            self.umount('/proc')
 
     def activate(self, fail_if_active: bool = False):
         """mount /dev, /sys and /proc"""
@@ -293,8 +312,7 @@ class Chroot:
         self.active = True
 
     def deactivate_core(self):
-        for dst in BASIC_MOUNTS.keys():
-            self.umount(dst)
+        self.umount_many(BASIC_MOUNTS.keys())
         # TODO: so this is a weird one. while the basic bind-mounts get unmounted
         # additional mounts like crossdirect are intentionally left intact. Is such a chroot still `active` afterwards?
         self.active = False
@@ -303,11 +321,7 @@ class Chroot:
         if not self.active:
             if fail_if_inactive:
                 raise Exception(f"Chroot {self.name} not activated, can't deactivate!")
-        for mount in self.active_mounts[::-1]:
-            if mount == 'proc':
-                continue
-            self.umount(mount)
-        self.umount('proc')
+        self.umount_many(self.active_mounts)
         self.active = False
 
     def run_cmd(self,
