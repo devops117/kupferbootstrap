@@ -3,6 +3,7 @@ import subprocess
 
 
 def fastboot_erase_dtbo():
+    logging.info(f"Fastboot: Erasing DTBO")
     subprocess.run(
         [
             'fastboot',
@@ -14,6 +15,7 @@ def fastboot_erase_dtbo():
 
 
 def fastboot_flash(partition, file):
+    logging.info(f"Fastboot: Flashing {file} to {partition}")
     result = subprocess.run([
         'fastboot',
         'flash',
@@ -26,6 +28,7 @@ def fastboot_flash(partition, file):
 
 
 def fastboot_boot(file):
+    logging.info(f"Fastboot: booting {file}")
     result = subprocess.run([
         'fastboot',
         'boot',
