@@ -113,6 +113,7 @@ def losetup_rootfs_image(image_path: str, sector_size: int) -> str:
         '-f',
         '-b',
         str(sector_size),
+        '-P',
         image_path,
     ])
     if result.returncode != 0:
@@ -158,12 +159,12 @@ def mount_rootfs_loop_device(loop_device, chroot: Chroot):
     logging.debug(f'Mounting {loop_device}p2 at {chroot.path}')
 
     chroot.mount_rootfs(loop_device + 'p2')
+    assert (os.path.ismount(chroot.path))
 
-    if not os.path.exists(f'{chroot.path}/boot'):
-        os.makedirs(f'{chroot.path}/boot')
+    os.makedirs(chroot.get_path('boot'), exist_ok=True)
 
     logging.debug(f'Mounting {loop_device}p1 at {chroot.path}/boot')
-    chroot.mount(loop_device + 'p1', '/boot')
+    chroot.mount(loop_device + 'p1', '/boot', options=['defaults'])
 
 
 def dump_bootimg(image_path: str) -> str:
@@ -237,6 +238,7 @@ def cmd_build():
     chroot = get_device_chroot(device=device, flavour=flavour, arch=arch, packages=packages, extra_repos=extra_repos)
     image_path = get_image_path(chroot)
 
+    os.makedirs(config.get_path('images'), exist_ok=True)
     new_image = not os.path.exists(image_path)
     if new_image:
         result = subprocess.run([
@@ -281,8 +283,6 @@ def cmd_build():
             '-F',
             '-L',
             'kupfer_root',
-            '-N',
-            '100000',
             f'{loop_device}p2',
         ])
         if result.returncode != 0:
@@ -290,7 +290,7 @@ def cmd_build():
 
     mount_rootfs_loop_device(loop_device, chroot)
 
-    chroot.mount_rootfs(image_path)
+    chroot.mount_pacman_cache()
     chroot.initialize()
     chroot.activate()
     chroot.create_user(

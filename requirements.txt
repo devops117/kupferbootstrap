@@ -1,3 +1,4 @@
 click==8.0.1
 appdirs==1.4.4
 joblib==1.0.1
+toml
