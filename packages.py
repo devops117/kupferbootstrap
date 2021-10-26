@@ -394,10 +394,7 @@ def check_package_version_built(package: Package, arch: Arch) -> bool:
 
 
 def setup_build_chroot(arch: Arch, extra_packages: list[str] = [], clean_chroot: bool = False) -> Chroot:
-    chroot = get_build_chroot(
-        arch,
-        extra_repos=get_kupfer_local(arch).repos,
-    )
+    chroot = get_build_chroot(arch)
     logging.info(f'Initializing {arch} build chroot')
     chroot.initialize(reset=clean_chroot)
     chroot.activate()

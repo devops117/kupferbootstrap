@@ -111,11 +111,13 @@ def get_base_chroot(arch: Arch, **kwargs) -> Chroot:
     return get_chroot(name, **kwargs, initialize=False, default=default)
 
 
-def get_build_chroot(arch: Arch, extra_repos=None, **kwargs) -> Chroot:
+def get_build_chroot(arch: Arch, **kwargs) -> Chroot:
     name = build_chroot_name(arch)
-    extra_repos = get_kupfer_local(arch).repos if extra_repos is None else extra_repos
-    default = Chroot(name, arch, initialize=False, copy_base=True, extra_repos=extra_repos)
-    return get_chroot(name, **kwargs, default=default)
+    if 'extra_repos' in kwargs:
+        raise Exception('extra_repos!')
+    default = Chroot(name, arch, initialize=False, copy_base=True, extra_repos=get_kupfer_local(arch).repos)
+    chroot = get_chroot(name, **kwargs, default=default)
+    return chroot
 
 
 def get_device_chroot(device: str, flavour: str, arch: Arch, packages: list[str] = BASE_PACKAGES, extra_repos={}, **kwargs) -> Chroot:
@@ -208,13 +210,19 @@ class Chroot:
                 ])
                 if result.returncode != 0:
                     raise Exception(f'Failed to copy {base_chroot.name} to {self.name}')
-                self.write_pacman_conf()
-                self.activate()
-                self.try_install_packages(self.base_packages, refresh=True, allow_fail=False)
-                self.deactivate()
+
             else:
                 logging.debug(f'{self.name}: Reusing existing installation')
-                self.write_pacman_conf()
+
+            if set(get_kupfer_local(self.arch).repos).intersection(set(self.extra_repos)):
+                self.mount_packages()
+
+            self.mount_pacman_cache()
+            self.write_pacman_conf()
+            self.initialized = True
+            self.activate()
+            self.try_install_packages(self.base_packages, refresh=True, allow_fail=False)
+            self.deactivate_core()
 
             # patch makepkg
             with open(self.get_path('/usr/bin/makepkg'), 'r') as file:
@@ -250,8 +258,8 @@ class Chroot:
             ])
             if result.returncode != 0:
                 raise Exception(f'Failed to initialize chroot "{self.name}"')
+            self.initialized = True
 
-        self.initialized = True
         if active_previously:
             self.activate()
 
