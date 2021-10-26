@@ -5,7 +5,8 @@ import click
 from config import config
 from constants import BOOT_STRATEGIES, FLASH_PARTS, FASTBOOT, JUMPDRIVE, JUMPDRIVE_VERSION
 from fastboot import fastboot_boot, fastboot_erase_dtbo
-from image import get_device_and_flavour, get_image_name, dump_bootimg, dump_lk2nd
+from image import get_device_and_flavour, get_image_path, dump_bootimg, dump_lk2nd
+from chroot import get_device_chroot
 from wrapper import enforce_wrap
 
 LK2ND = FLASH_PARTS['LK2ND']
@@ -20,8 +21,8 @@ def cmd_boot(type):
     f"""Flash one of {', '.join(TYPES)}"""
     enforce_wrap()
     device, flavour = get_device_and_flavour()
-    image_name = get_image_name(device, flavour)
-    image_path = os.path.join(config.get_path('images'), image_name)
+    chroot = get_device_chroot(device, flavour, 'aarch64')
+    image_path = get_image_path(chroot)
     strategy = BOOT_STRATEGIES[device]
 
     if strategy == FASTBOOT:
