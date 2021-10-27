@@ -111,11 +111,12 @@ def get_base_chroot(arch: Arch, **kwargs) -> Chroot:
     return get_chroot(name, **kwargs, initialize=False, default=default)
 
 
-def get_build_chroot(arch: Arch, **kwargs) -> Chroot:
+def get_build_chroot(arch: Arch, add_kupfer_repos: bool = True, **kwargs) -> Chroot:
     name = build_chroot_name(arch)
     if 'extra_repos' in kwargs:
         raise Exception('extra_repos!')
-    default = Chroot(name, arch, initialize=False, copy_base=True, extra_repos=get_kupfer_local(arch).repos)
+    repos = get_kupfer_local(arch).repos if add_kupfer_repos else {}
+    default = Chroot(name, arch, initialize=False, copy_base=True, extra_repos=repos)
     chroot = get_chroot(name, **kwargs, default=default)
     return chroot
 
