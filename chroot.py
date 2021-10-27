@@ -241,6 +241,7 @@ class Chroot:
                     rmtree(dir)
 
             self.write_pacman_conf()
+            self.mount_pacman_cache()
 
             logging.info(f'Pacstrapping chroot {self.name}: {", ".join(self.base_packages)}')
 
