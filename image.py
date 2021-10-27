@@ -4,7 +4,9 @@ import os
 import re
 import subprocess
 import click
-from logger import logging
+import logging
+
+from binfmt import register as binfmt_register
 from chroot import Chroot, get_device_chroot
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config
@@ -228,6 +230,8 @@ def cmd_build():
     arch = 'aarch64'
     sector_size = 4096
 
+    binfmt_register(arch)
+
     packages_dir = config.get_package_dir(arch)
     if os.path.exists(os.path.join(packages_dir, 'main')):
         extra_repos = get_kupfer_local(arch).repos
@@ -329,6 +333,7 @@ def cmd_inspect(shell: bool = False):
     if shell:
         chroot.initialized = True
         chroot.activate()
+        binfmt_register(arch)
         chroot.run_cmd('/bin/bash')
     else:
         pause()
