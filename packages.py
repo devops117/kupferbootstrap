@@ -101,7 +101,7 @@ class Package:
         return f'package({self.name},{repr(self.names)})'
 
 
-def clone_pkbuilds(pkgbuilds_dir: str, repo_url: str, branch: str, interactive=False):
+def clone_pkbuilds(pkgbuilds_dir: str, repo_url: str, branch: str, interactive=False, update=True):
     git_dir = os.path.join(pkgbuilds_dir, '.git')
     if not os.path.exists(git_dir):
         logging.info('Cloning branch {branch} from {repo}')
@@ -117,19 +117,20 @@ def clone_pkbuilds(pkgbuilds_dir: str, repo_url: str, branch: str, interactive=F
                 result = git(['switch', branch], dir=pkgbuilds_dir)
                 if result.returncode != 0:
                     raise Exception('failed switching branches')
-        if interactive:
-            if not click.confirm('Would you like to try updating the PKGBUILDs repo?'):
-                return
-        result = git(['pull'], pkgbuilds_dir)
-        if result.returncode != 0:
-            raise Exception('failed to update pkgbuilds')
+        if update:
+            if interactive:
+                if not click.confirm('Would you like to try updating the PKGBUILDs repo?'):
+                    return
+            result = git(['pull'], pkgbuilds_dir)
+            if result.returncode != 0:
+                raise Exception('failed to update pkgbuilds')
 
 
 def init_pkgbuilds(interactive=False):
     pkgbuilds_dir = config.get_path('pkgbuilds')
     repo_url = config.file['pkgbuilds']['git_repo']
     branch = config.file['pkgbuilds']['git_branch']
-    clone_pkbuilds(pkgbuilds_dir, repo_url, branch, interactive=interactive)
+    clone_pkbuilds(pkgbuilds_dir, repo_url, branch, interactive=interactive, update=False)
 
 
 def init_prebuilts(arch: Arch, dir: str = None):
