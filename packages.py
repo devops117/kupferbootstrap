@@ -10,7 +10,6 @@ from joblib import Parallel, delayed
 from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch
 from config import config
 from chroot import get_build_chroot, Chroot
-from distro import get_kupfer_local
 from ssh import run_ssh_command, scp_put_files
 from wrapper import enforce_wrap
 from utils import git
@@ -48,13 +47,17 @@ class Package:
     repo = ''
     mode = ''
 
-    def __init__(self, path: str, dir: str = None) -> None:
+    def __init__(
+        self,
+        path: str,
+        native_chroot: Chroot,
+    ) -> None:
         self.path = path
-        dir = dir if dir else config.get_path('pkgbuilds')
-        self._loadinfo(dir)
+        dir = config.get_path('pkgbuilds')
+        self._loadinfo(dir, native_chroot)
 
-    def _loadinfo(self, dir):
-        result = subprocess.run(
+    def _loadinfo(self, dir, native_chroot: Chroot):
+        result = native_chroot.run_cmd(
             makepkg_cmd + ['--printsrcinfo'],
             cwd=os.path.join(dir, self.path),
             stdout=subprocess.PIPE,
@@ -153,8 +156,8 @@ def init_prebuilts(arch: Arch, dir: str = None):
                         exit(1)
 
 
-def discover_packages(dir: str = None) -> dict[str, Package]:
-    dir = dir if dir else config.get_path('pkgbuilds')
+def discover_packages() -> dict[str, Package]:
+    dir = config.get_path('pkgbuilds')
     packages = {}
     paths = []
     init_pkgbuilds(interactive=False)
@@ -162,7 +165,8 @@ def discover_packages(dir: str = None) -> dict[str, Package]:
         for _dir in os.listdir(os.path.join(dir, repo)):
             paths.append(os.path.join(dir, repo, _dir))
 
-    results = Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(Package)(path, dir) for path in paths)
+    native_chroot = setup_build_chroot(config.runtime['arch'], add_kupfer_repos=False)
+    results = Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(Package)(path, native_chroot) for path in paths)
     for package in results:
         packages[package.name] = package
 
@@ -191,7 +195,7 @@ def filter_packages_by_paths(repo: dict[str, Package], paths: list[str]) -> list
         return repo.values()
     result = []
     for pkg in repo.values():
-        if pkg.path.replace('/pkgbuilds/', '') in paths:
+        if pkg.path.replace(config.get_path('pkgbuilds').rstrip('/') + '/', '') in paths:
             result += [pkg]
     return result
 
@@ -393,10 +397,16 @@ def check_package_version_built(package: Package, arch: Arch) -> bool:
     return not missing
 
 
-def setup_build_chroot(arch: Arch, extra_packages: list[str] = [], clean_chroot: bool = False) -> Chroot:
-    chroot = get_build_chroot(arch)
+def setup_build_chroot(
+    arch: Arch,
+    extra_packages: list[str] = [],
+    add_kupfer_repos: bool = True,
+    clean_chroot: bool = False,
+) -> Chroot:
+    chroot = get_build_chroot(arch, add_kupfer_repos=add_kupfer_repos)
     logging.info(f'Initializing {arch} build chroot')
     chroot.initialize(reset=clean_chroot)
+    chroot.write_pacman_conf()  # in case it was initialized with different repos
     chroot.activate()
     chroot.mount_pacman_cache()
     chroot.mount_pkgbuilds()
@@ -647,7 +657,7 @@ def cmd_clean():
             'clean',
             '-dffX',
         ] + REPOSITORIES,
-        dir='/pkgbuilds',
+        dir=config.get_path('pkgbuilds'),
     )
     if result.returncode != 0:
         logging.fatal('Failed to git clean')

@@ -118,6 +118,7 @@ def get_build_chroot(arch: Arch, add_kupfer_repos: bool = True, **kwargs) -> Chr
     repos = get_kupfer_local(arch).repos if add_kupfer_repos else {}
     default = Chroot(name, arch, initialize=False, copy_base=True, extra_repos=repos)
     chroot = get_chroot(name, **kwargs, default=default)
+    chroot.extra_repos = repos
     return chroot
 
 
@@ -342,7 +343,8 @@ class Chroot:
                 attach_tty: str = False,
                 capture_output: str = False,
                 cwd: str = None,
-                fail_inactive: bool = True) -> subprocess.CompletedProcess:
+                fail_inactive: bool = True,
+                stdout=None) -> subprocess.CompletedProcess:
         if not self.active and fail_inactive:
             raise Exception(f'Chroot {self.name} is inactive, not running command! Hint: pass `fail_inactive=False`')
         if outer_env is None:
@@ -353,7 +355,7 @@ class Chroot:
             'env': outer_env,
         }
         if not attach_tty:
-            kwargs |= {'capture_output': capture_output}
+            kwargs |= {'stdout': stdout} if stdout else {'capture_output': capture_output}
 
         if not isinstance(script, str) and isinstance(script, list):
             script = ' '.join(script)
