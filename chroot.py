@@ -459,7 +459,7 @@ class Chroot:
         if not os.path.islink(ld_so_target):
             os.symlink(os.path.join('/native', 'usr', 'lib', ld_so), ld_so_target)
         else:
-            logging.debug('ld-linux.so symlink already exists, skipping for {target_chroot.name}')
+            logging.debug(f'ld-linux.so symlink already exists, skipping for {self.name}')
 
         # TODO: find proper fix
         rustc = os.path.join(native_chroot.path, 'usr/lib/crossdirect', target_arch, 'rustc')
