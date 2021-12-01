@@ -88,7 +88,7 @@ class Repo(RepoInfo):
 
         self.scanned = True
 
-    def __init__(self, name: str, url_template: str, arch: str, options={}, scan=True):
+    def __init__(self, name: str, url_template: str, arch: str, options={}, scan=False):
         self.packages = {}
         self.name = name
         self.url_template = url_template
@@ -109,7 +109,7 @@ class Distro:
     repos: dict[str, Repo]
     arch: str
 
-    def __init__(self, arch: str, repo_infos: dict[str, RepoInfo], scan=True):
+    def __init__(self, arch: str, repo_infos: dict[str, RepoInfo], scan=False):
         assert (arch in ARCHES)
         self.arch = arch
         self.repos = dict[str, Repo]()
