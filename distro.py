@@ -68,7 +68,6 @@ class Repo(RepoInfo):
         self.resolved_url = resolve_url(self.url_template, repo_name=self.name, arch=self.arch)
         self.remote = not self.resolved_url.startswith('file://')
         uri = f'{self.resolved_url}/{self.name}.db'
-        file_handle = None
         path = ''
         if self.remote:
             logging.debug(f'Downloading repo file from {uri}')
