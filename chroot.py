@@ -398,7 +398,7 @@ class Chroot:
         if refresh:
             results['refresh'] = self.run_cmd('pacman -Syy --noconfirm')
         cmd = 'pacman -S --noconfirm --needed'
-        result = self.run_cmd(f'{cmd} {" ".join(packages)}')
+        result = self.run_cmd(f'{cmd} -y {" ".join(packages)}')
         results |= {package: result for package in packages}
         if result.returncode != 0 and allow_fail:
             results = {}
