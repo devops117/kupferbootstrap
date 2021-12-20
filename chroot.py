@@ -278,7 +278,8 @@ class Chroot:
         """returns the absolute path `relative_target` was mounted at"""
         relative_destination = relative_destination.lstrip('/')
         absolute_destination = self.get_path(relative_destination)
-        if os.path.ismount(absolute_destination):
+        pseudo_absolute = make_abs_path(relative_destination)
+        if os.path.ismount(absolute_destination) or pseudo_absolute in self.active_mounts:
             if fail_if_mounted:
                 raise Exception(f'{self.name}: {absolute_destination} is already mounted')
             logging.debug(f'{self.name}: {absolute_destination} already mounted. Skipping.')
@@ -289,7 +290,7 @@ class Chroot:
             if result.returncode != 0:
                 raise Exception(f'{self.name}: failed to mount {absolute_source} to {absolute_destination}')
             logging.debug(f'{self.name}: {absolute_source} successfully mounted to {absolute_destination}.')
-            self.active_mounts += [make_abs_path(relative_destination)]
+            self.active_mounts += [pseudo_absolute]
             atexit.register(self.deactivate)
         return absolute_destination
 
