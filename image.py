@@ -6,11 +6,11 @@ import subprocess
 import click
 import logging
 
-from binfmt import register as binfmt_register
 from chroot import Chroot, get_device_chroot
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config
 from distro import get_base_distro, get_kupfer_https, get_kupfer_local
+from packages import build_enable_qemu_binfmt
 from ssh import copy_ssh_keys
 from wrapper import enforce_wrap
 from signal import pause
@@ -230,7 +230,7 @@ def cmd_build():
     arch = 'aarch64'
     sector_size = 4096
 
-    binfmt_register(arch)
+    build_enable_qemu_binfmt(arch)
 
     packages_dir = config.get_package_dir(arch)
     if os.path.exists(os.path.join(packages_dir, 'main')):
@@ -333,7 +333,7 @@ def cmd_inspect(shell: bool = False):
     if shell:
         chroot.initialized = True
         chroot.activate()
-        binfmt_register(arch)
+        build_enable_qemu_binfmt(arch)
         chroot.run_cmd('/bin/bash')
     else:
         pause()

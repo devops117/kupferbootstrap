@@ -578,6 +578,29 @@ def build_packages_by_paths(
     )
 
 
+def build_enable_qemu_binfmt(arch: Arch, repo: dict[str, Package] = None):
+    if arch not in ARCHES:
+        raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
+    enforce_wrap()
+    if not repo:
+        repo = discover_packages()
+    native = config.runtime['arch']
+    # build qemu-user, binfmt, crossdirect
+    chroot = setup_build_chroot(native)
+    logging.info('Installing qemu-user (building if necessary)')
+    build_packages_by_paths(
+        ['cross/' + pkg for pkg in CROSSDIRECT_PKGS],
+        native,
+        repo,
+        enable_crosscompile=False,
+        enable_crossdirect=False,
+        enable_ccache=False,
+    )
+    subprocess.run(['pacman', '-Syy', '--noconfirm', '--needed', '--config', os.path.join(chroot.path, 'etc/pacman.conf')] + QEMU_BINFMT_PKGS)
+    if arch != native:
+        binfmt_register(arch)
+
+
 @click.group(name='packages')
 def cmd_packages():
     pass
@@ -607,20 +630,8 @@ def build(paths: list[str], force: bool, arch: Arch):
         raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
     enforce_wrap()
     repo: dict[str, Package] = discover_packages()
-    native = config.runtime['arch']
-    if arch != native:
-        # build qemu-user, binfmt, crossdirect
-        chroot = setup_build_chroot(native)
-        build_packages_by_paths(
-            ['cross/' + pkg for pkg in CROSSDIRECT_PKGS],
-            native,
-            repo,
-            enable_crosscompile=False,
-            enable_crossdirect=False,
-            enable_ccache=False,
-        )
-        subprocess.run(['pacman', '-Syy', '--noconfirm', '--needed', '--config', os.path.join(chroot.path, 'etc/pacman.conf')] + QEMU_BINFMT_PKGS)
-        binfmt_register(arch)
+    if arch != config.runtime['arch']:
+        build_enable_qemu_binfmt(arch, repo=repo)
 
     return build_packages_by_paths(
         paths,
