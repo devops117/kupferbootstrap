@@ -37,6 +37,9 @@ CONFIG_DEFAULTS = {
         'git_repo': 'https://gitlab.com/kupfer/packages/pkgbuilds.git',
         'git_branch': 'dev',
     },
+    'pacman': {
+        'parallel_downloads': 4,
+    },
     'paths': {
         'cache_dir': CACHE_DIR,
         'chroots': os.path.join('%cache_dir%', 'chroots'),

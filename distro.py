@@ -171,7 +171,7 @@ Color
 #NoProgressBar
 {'' if check_space else '#'}CheckSpace
 VerbosePkgLists
-ParallelDownloads = 8
+ParallelDownloads = {config.file['pacman']['parallel_downloads']}
 
 # By default, pacman accepts packages signed by keys that its local keyring
 # trusts (see pacman-key and its man page), as well as unsigned packages.
