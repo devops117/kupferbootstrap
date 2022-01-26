@@ -129,7 +129,7 @@ class Distro:
             for package in repo.packages:
                 results[package.name] = package
 
-    def _repos_config_snippet(self, extra_repos: dict[str, RepoInfo] = {}) -> str:
+    def repos_config_snippet(self, extra_repos: dict[str, RepoInfo] = {}) -> str:
         extras = [Repo(name, url_template=info.url_template, arch=self.arch, options=info.options, scan=False) for name, info in extra_repos.items()]
         return '\n\n'.join(repo.config_snippet() for repo in (list(self.repos.values()) + extras))
 
@@ -203,7 +203,7 @@ LocalFileSigLevel = Optional
 #
 
 '''
-        return header + self._repos_config_snippet(extra_repos)
+        return header + self.repos_config_snippet(extra_repos)
 
 
 def get_base_distro(arch: str) -> Distro:
@@ -223,5 +223,8 @@ def get_kupfer_https(arch: str) -> Distro:
     return get_kupfer(arch, KUPFER_HTTPS)
 
 
-def get_kupfer_local(arch: str) -> Distro:
-    return get_kupfer(arch, f"file://{config.get_path('packages')}/$arch/$repo")
+def get_kupfer_local(arch: str = None, in_chroot: bool = True) -> Distro:
+    if not arch:
+        arch = config.runtime['arch']
+    dir = CHROOT_PATHS['packages'] if in_chroot else config.get_path('packages')
+    return get_kupfer(arch, f"file://{dir}/$arch/$repo")

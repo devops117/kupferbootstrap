@@ -422,8 +422,12 @@ class Chroot:
         if not os.path.exists(source_path):
             raise Exception('Source does not exist')
         if not allow_overlay:
-            if self.active_mounts:
-                raise Exception(f'{self.name}: Chroot has submounts active: {self.active_mounts}')
+            really_active = []
+            for mnt in self.active_mounts:
+                if check_findmnt(self.get_path(mnt)):
+                    really_active.append(mnt)
+            if really_active:
+                raise Exception(f'{self.name}: Chroot has submounts active: {really_active}')
             if os.path.ismount(self.path):
                 raise Exception(f'{self.name}: There is already something mounted at {self.path}, not mounting over it.')
             if os.path.exists(os.path.join(self.path, 'usr/bin')):

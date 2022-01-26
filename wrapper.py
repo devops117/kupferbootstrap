@@ -35,7 +35,7 @@ def wrap_docker():
             for argname in ['--config', '-C']:
                 if arg.startswith(argname):
                     done = True
-                    if arg != argname:  # arg is longer, assume --arg=value
+                    if arg.strip() != argname:  # arg is longer, assume --arg=value
                         offset = 1
                     else:
                         offset = 2
@@ -119,7 +119,7 @@ def wrap_docker():
             '--privileged',
         ] + _docker_volumes(volumes) + [tag]
 
-        kupfer_cmd = ['kupferbootstrap'] + _filter_args(sys.argv[1:])
+        kupfer_cmd = ['kupferbootstrap', '--config', '/root/.config/kupfer/kupferbootstrap.toml'] + _filter_args(sys.argv[1:])
 
         cmd = docker_cmd + kupfer_cmd
         logging.debug('Wrapping in docker:' + repr(cmd))

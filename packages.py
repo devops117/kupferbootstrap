@@ -7,7 +7,7 @@ import subprocess
 from copy import deepcopy
 from joblib import Parallel, delayed
 
-from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch
+from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch, CHROOT_PATHS
 from config import config
 from chroot import get_build_chroot, Chroot
 from ssh import run_ssh_command, scp_put_files
@@ -53,12 +53,12 @@ class Package:
         native_chroot: Chroot,
     ) -> None:
         self.path = path
-        self._loadinfo(CHROOT_PATHS['pkgbuilds'], native_chroot)
+        self._loadinfo(native_chroot)
 
-    def _loadinfo(self, dir, native_chroot: Chroot):
+    def _loadinfo(self, native_chroot: Chroot):
         result = native_chroot.run_cmd(
             makepkg_cmd + ['--printsrcinfo'],
-            cwd=os.path.join(dir, self.path),
+            cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], self.path),
             stdout=subprocess.PIPE,
         )
         lines = result.stdout.decode('utf-8').split('\n')
@@ -86,7 +86,8 @@ class Package:
         self.repo = self.path.split('/')[0]
 
         mode = ''
-        with open(os.path.join(config.get_path('pkgbuilds'), self.path, 'PKGBUILD'), 'r') as file:
+        logging.debug(config)
+        with open(os.path.join(native_chroot.get_path(CHROOT_PATHS['pkgbuilds']), self.path, 'PKGBUILD'), 'r') as file:
             for line in file.read().split('\n'):
                 if line.startswith('_mode='):
                     mode = line.split('=')[1]
@@ -630,6 +631,7 @@ def build(paths: list[str], force: bool, arch: Arch):
     if arch not in ARCHES:
         raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
     enforce_wrap()
+    config.enforce_config_loaded()
     repo: dict[str, Package] = discover_packages()
     if arch != config.runtime['arch']:
         build_enable_qemu_binfmt(arch, repo=repo)
