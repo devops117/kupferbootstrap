@@ -7,16 +7,10 @@ import uuid
 import click
 import logging
 from config import config, dump_file as dump_config_file
+from constants import CHROOT_PATHS
 from utils import programs_available
 
-DOCKER_PATHS = {
-    'chroots': '/chroot',
-    'jumpdrive': '/var/cache/jumpdrive',
-    'pacman': '/var/cache/pacman',
-    'packages': '/prebuilts',
-    'pkgbuilds': '/pkgbuilds',
-    'images': '/images',
-}
+DOCKER_PATHS = CHROOT_PATHS.copy()
 
 
 def wrap_docker():

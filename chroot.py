@@ -12,7 +12,7 @@ from shlex import quote as shell_quote
 from utils import mount, umount, check_findmnt, log_or_exception
 from distro import get_kupfer_local
 from wrapper import enforce_wrap
-from constants import Arch, GCC_HOSTSPECS, CROSSDIRECT_PKGS, BASE_PACKAGES
+from constants import Arch, GCC_HOSTSPECS, CROSSDIRECT_PKGS, BASE_PACKAGES, CHROOT_PATHS
 from generator import generate_makepkg_conf
 
 BIND_BUILD_DIRS = 'BINDBUILDDIRS'
@@ -481,24 +481,37 @@ class Chroot:
         return native_mount
 
     def mount_pkgbuilds(self, fail_if_mounted: bool = False) -> str:
-        pkgbuilds = config.get_path('pkgbuilds')
-        return self.mount(absolute_source=pkgbuilds, relative_destination=pkgbuilds.lstrip('/'), fail_if_mounted=fail_if_mounted)
+        return self.mount(
+            absolute_source=config.get_path('pkgbuilds'),
+            relative_destination=CHROOT_PATHS['pkgbuilds'].lstrip('/'),
+            fail_if_mounted=fail_if_mounted,
+        )
 
     def mount_pacman_cache(self, fail_if_mounted: bool = False) -> str:
         arch_cache = os.path.join(config.get_path('pacman'), self.arch)
-        rel_target = os.path.join('var/cache/pacman', self.arch)
+        rel_target = os.path.join(CHROOT_PATHS['pacman'].lstrip('/'), self.arch)
         for dir in [arch_cache, self.get_path(rel_target)]:
             os.makedirs(dir, exist_ok=True)
-        return self.mount(arch_cache, rel_target, fail_if_mounted=fail_if_mounted)
+        return self.mount(
+            arch_cache,
+            rel_target,
+            fail_if_mounted=fail_if_mounted,
+        )
 
     def mount_packages(self, fail_if_mounted: bool = False) -> str:
-        packages = config.get_path('packages')
-        return self.mount(absolute_source=packages, relative_destination=packages.lstrip('/'), fail_if_mounted=fail_if_mounted)
+        return self.mount(
+            absolute_source=config.get_path('packages'),
+            relative_destination=CHROOT_PATHS['packages'].lstrip('/'),
+            fail_if_mounted=fail_if_mounted,
+        )
 
     def mount_crosscompile(self, foreign_chroot: Chroot, fail_if_mounted: bool = False):
-        mount_dest = os.path.join('chroot', os.path.basename(foreign_chroot.path))
-        os.makedirs(os.path.join(self.path, mount_dest), exist_ok=True)
-        return self.mount(absolute_source=foreign_chroot.path, relative_destination=mount_dest, fail_if_mounted=fail_if_mounted)
+        mount_dest = os.path.join(CHROOT_PATHS['chroots'].lstrip('/'), os.path.basename(foreign_chroot.path))
+        return self.mount(
+            absolute_source=foreign_chroot.path,
+            relative_destination=mount_dest,
+            fail_if_mounted=fail_if_mounted,
+        )
 
     def write_makepkg_conf(self, target_arch: Arch, cross_chroot_relative: str, cross: bool = True) -> str:
         """

@@ -53,8 +53,7 @@ class Package:
         native_chroot: Chroot,
     ) -> None:
         self.path = path
-        dir = config.get_path('pkgbuilds')
-        self._loadinfo(dir, native_chroot)
+        self._loadinfo(CHROOT_PATHS['pkgbuilds'], native_chroot)
 
     def _loadinfo(self, dir, native_chroot: Chroot):
         result = native_chroot.run_cmd(
@@ -84,10 +83,10 @@ class Package:
         self.names = list(set(names))
         self.depends = list(set(depends))
 
-        self.repo = self.path.split('/')[2]
+        self.repo = self.path.split('/')[0]
 
         mode = ''
-        with open(os.path.join(self.path, 'PKGBUILD'), 'r') as file:
+        with open(os.path.join(config.get_path('pkgbuilds'), self.path, 'PKGBUILD'), 'r') as file:
             for line in file.read().split('\n'):
                 if line.startswith('_mode='):
                     mode = line.split('=')[1]
@@ -98,7 +97,7 @@ class Package:
         self.mode = mode
 
     def __repr__(self):
-        return f'package({self.name},{repr(self.names)})'
+        return f'Package({self.name},{repr(self.names)},{repr(self.path)})'
 
 
 def clone_pkbuilds(pkgbuilds_dir: str, repo_url: str, branch: str, interactive=False, update=True):
@@ -158,13 +157,13 @@ def init_prebuilts(arch: Arch, dir: str = None):
 
 
 def discover_packages() -> dict[str, Package]:
-    dir = config.get_path('pkgbuilds')
+    pkgbuilds_dir = config.get_path('pkgbuilds')
     packages = {}
     paths = []
     init_pkgbuilds(interactive=False)
     for repo in REPOSITORIES:
-        for _dir in os.listdir(os.path.join(dir, repo)):
-            paths.append(os.path.join(dir, repo, _dir))
+        for dir in os.listdir(os.path.join(pkgbuilds_dir, repo)):
+            paths.append(os.path.join(repo, dir))
 
     native_chroot = setup_build_chroot(config.runtime['arch'], add_kupfer_repos=False)
     results = Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(Package)(path, native_chroot) for path in paths)
@@ -196,7 +195,7 @@ def filter_packages_by_paths(repo: dict[str, Package], paths: list[str]) -> list
         return repo.values()
     result = []
     for pkg in repo.values():
-        if pkg.path.replace(config.get_path('pkgbuilds').rstrip('/') + '/', '') in paths:
+        if pkg.path in paths:
             result += [pkg]
     return result
 
@@ -371,7 +370,7 @@ def check_package_version_built(package: Package, arch: Arch) -> bool:
         cross=True,
     )
 
-    cmd = ['cd', package.path, '&&'] + makepkg_cmd + [
+    cmd = ['cd', os.path.join(CHROOT_PATHS['pkgbuilds'], package.path), '&&'] + makepkg_cmd + [
         '--config',
         config_path,
         '--nobuild',
@@ -418,7 +417,7 @@ def setup_build_chroot(
 
 
 def setup_sources(package: Package, chroot: Chroot, makepkg_conf_path = '/etc/makepkg.conf', pkgbuilds_dir: str = None):
-    pkgbuilds_dir = pkgbuilds_dir if pkgbuilds_dir else config.get_path('pkgbuilds')
+    pkgbuilds_dir = pkgbuilds_dir if pkgbuilds_dir else CHROOT_PATHS['pkgbuilds']
     makepkg_setup_args = [
         '--config',
         makepkg_conf_path,
@@ -428,7 +427,7 @@ def setup_sources(package: Package, chroot: Chroot, makepkg_conf_path = '/etc/ma
     ]
 
     logging.info(f'Setting up sources for {package.path} in {chroot.name}')
-    result = chroot.run_cmd(makepkg_cmd + makepkg_setup_args, cwd=package.path)
+    result = chroot.run_cmd(makepkg_cmd + makepkg_setup_args, cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], package.path))
     if result.returncode != 0:
         raise Exception(f'Failed to check sources for {package.path}')
 
@@ -472,7 +471,7 @@ def build_package(
         if results['crossdirect'].returncode != 0:
             raise Exception('Unable to install crossdirect')
         # mount foreign arch chroot inside native chroot
-        chroot_relative = os.path.join('chroot', target_chroot.name)
+        chroot_relative = os.path.join(CHROOT_PATHS['chroots'], target_chroot.name)
         makepkg_path_absolute = native_chroot.write_makepkg_conf(target_arch=arch, cross_chroot_relative=chroot_relative, cross=True)
         makepkg_conf_path = os.path.join('etc', os.path.basename(makepkg_path_absolute))
         native_chroot.mount_crosscompile(target_chroot)
@@ -495,7 +494,7 @@ def build_package(
 
     build_cmd = f'makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
     logging.debug(f'Building: Running {build_cmd}')
-    result = build_root.run_cmd(build_cmd, inner_env=env, cwd=package.path)
+    result = build_root.run_cmd(build_cmd, inner_env=env, cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], package.path))
 
     if result.returncode != 0:
         raise Exception(f'Failed to compile package {package.path}')
@@ -725,15 +724,15 @@ def cmd_check(paths):
             source_key: False,
             sha256sums_key: False,
         }
-
-        with open(os.path.join(package.path, 'PKGBUILD'), 'r') as file:
+        pkgbuild_path = os.path.join(config.get_path('pkgbuilds'), package.path, 'PKGBUILD')
+        with open(pkgbuild_path, 'r') as file:
             content = file.read()
             if '\t' in content:
-                logging.fatal(f'\\t is not allowed in {os.path.join(package.path, "PKGBUILD")}')
+                logging.fatal(f'\\t is not allowed in {pkgbuild_path}')
                 exit(1)
             lines = content.split('\n')
             if len(lines) == 0:
-                logging.fatal(f'Empty {os.path.join(package.path, "PKGBUILD")}')
+                logging.fatal(f'Empty {pkgbuild_path}')
                 exit(1)
             line_index = 0
             key_index = 0
@@ -811,7 +810,7 @@ def cmd_check(paths):
                         reason = f'Expected to find "{key}"'
 
                 if not formatted:
-                    logging.fatal(f'Line {line_index+1} in {os.path.join(package.path, "PKGBUILD")} is not formatted correctly: "{line}"')
+                    logging.fatal(f'Formatting error in {pkgbuild_path}: Line {line_index+1}: "{line}"')
                     if reason != "":
                         logging.fatal(reason)
                     exit(1)
@@ -819,9 +818,9 @@ def cmd_check(paths):
                 if key == arch_key:
                     if line.endswith(')'):
                         if line.startswith(f'{arch_key}=('):
-                            check_arches_hint(os.path.join(package.path, "PKGBUILD"), required_arches, [line[6:-1]])
+                            check_arches_hint(pkgbuild_path, required_arches, [line[6:-1]])
                         else:
-                            check_arches_hint(os.path.join(package.path, "PKGBUILD"), required_arches, provided_arches)
+                            check_arches_hint(pkgbuild_path, required_arches, provided_arches)
                     elif line.startswith('    '):
                         provided_arches.append(line[4:])
 

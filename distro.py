@@ -5,7 +5,7 @@ import os
 import tarfile
 import logging
 
-from constants import ARCHES, BASE_DISTROS, REPOSITORIES, KUPFER_HTTPS
+from constants import ARCHES, BASE_DISTROS, REPOSITORIES, KUPFER_HTTPS, CHROOT_PATHS
 from config import config
 
 
@@ -148,7 +148,7 @@ class Distro:
 # If you wish to use different paths, uncomment and update the paths.
 #RootDir     = /
 #DBPath      = /var/lib/pacman/
-CacheDir    = /var/cache/pacman/{self.arch}/
+CacheDir    = {CHROOT_PATHS['pacman']}/{self.arch}
 #LogFile     = /var/log/pacman.log
 #GPGDir      = /etc/pacman.d/gnupg/
 #HookDir     = /etc/pacman.d/hooks/

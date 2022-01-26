@@ -142,3 +142,12 @@ SSH_COMMON_OPTIONS = [
     '-o',
     'StrictHostKeyChecking=no',
 ]
+
+CHROOT_PATHS = {
+    'chroots': '/chroot',
+    'jumpdrive': '/var/cache/jumpdrive',
+    'pacman': '/var/cache/pacman',
+    'packages': '/prebuilts',
+    'pkgbuilds': '/pkgbuilds',
+    'images': '/images',
+}
