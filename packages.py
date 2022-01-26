@@ -417,9 +417,11 @@ def setup_build_chroot(
     return chroot
 
 
-def setup_sources(package: Package, chroot: Chroot, pkgbuilds_dir: str = None):
+def setup_sources(package: Package, chroot: Chroot, makepkg_conf_path = '/etc/makepkg.conf', pkgbuilds_dir: str = None):
     pkgbuilds_dir = pkgbuilds_dir if pkgbuilds_dir else config.get_path('pkgbuilds')
     makepkg_setup_args = [
+        '--config',
+        makepkg_conf_path,
         '--nobuild',
         '--holdver',
         '--nodeps',
@@ -488,9 +490,9 @@ def build_package(
                 env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
             logging.debug(('Building for native arch. ' if not foreign_arch else '') + 'Skipping crossdirect.')
 
-    setup_sources(package, build_root)
-
     makepkg_conf_absolute = os.path.join('/', makepkg_conf_path)
+    setup_sources(package, build_root, makepkg_conf_path=makepkg_conf_absolute)
+
     build_cmd = f'makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
     logging.debug(f'Building: Running {build_cmd}')
     result = build_root.run_cmd(build_cmd, inner_env=env, cwd=package.path)
