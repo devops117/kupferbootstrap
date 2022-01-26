@@ -405,7 +405,7 @@ class Chroot:
         results = {}
         if refresh:
             results['refresh'] = self.run_cmd('pacman -Syy --noconfirm')
-        cmd = 'pacman -S --noconfirm --needed'
+        cmd = "pacman -S --noconfirm --needed --overwrite='/*'"
         result = self.run_cmd(f'{cmd} -y {" ".join(packages)}')
         results |= {package: result for package in packages}
         if result.returncode != 0 and allow_fail:
