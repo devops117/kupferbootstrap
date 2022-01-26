@@ -19,7 +19,7 @@ from ssh import cmd_ssh
 
 
 @click.group()
-@click.option('--error-shell', 'error_shell', is_flag=True, default=False, help='Spawn shell after error occurs')
+@click.option('--error-shell', '-E', 'error_shell', is_flag=True, default=False, help='Spawn shell after error occurs')
 @verbose_option
 @config_option
 @nowrapper_option
