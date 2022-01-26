@@ -9,7 +9,7 @@ from shutil import rmtree
 from config import config
 from distro import get_base_distro, RepoInfo
 from shlex import quote as shell_quote
-from utils import mount, umount
+from utils import mount, umount, check_findmnt, log_or_exception
 from distro import get_kupfer_local
 from wrapper import enforce_wrap
 from constants import Arch, GCC_HOSTSPECS, CROSSDIRECT_PKGS, BASE_PACKAGES
@@ -235,6 +235,9 @@ class Chroot:
 
             # configure makepkg
             self.write_makepkg_conf(self.arch, cross_chroot_relative=None, cross=False)
+
+            if active_previously:
+                self.activate()
         else:
             # base chroot
             if reset:
@@ -263,9 +266,6 @@ class Chroot:
                 raise Exception(f'Failed to initialize chroot "{self.name}"')
             self.initialized = True
 
-        if active_previously:
-            self.activate()
-
     def mount(
         self,
         absolute_source: str,
@@ -274,16 +274,23 @@ class Chroot:
         fs_type: str = None,
         fail_if_mounted: bool = True,
         makedir: bool = True,
+        strict_cache_consistency: bool = False,
     ):
         """returns the absolute path `relative_target` was mounted at"""
+        def log_or_exc(msg):
+            log_or_exception(strict_cache_consistency, msg, log_level=logging.ERROR)
         relative_destination = relative_destination.lstrip('/')
         absolute_destination = self.get_path(relative_destination)
         pseudo_absolute = make_abs_path(relative_destination)
-        if os.path.ismount(absolute_destination) or pseudo_absolute in self.active_mounts:
-            if fail_if_mounted:
+        if check_findmnt(absolute_destination):
+            if pseudo_absolute not in self.active_mounts:
+                raise Exception(f'{self.name}: We leaked the mount for {pseudo_absolute} ({absolute_destination}).')
+            elif fail_if_mounted:
                 raise Exception(f'{self.name}: {absolute_destination} is already mounted')
             logging.debug(f'{self.name}: {absolute_destination} already mounted. Skipping.')
         else:
+            if pseudo_absolute in self.active_mounts:
+                log_or_exc(f'{self.name}: Mount {pseudo_absolute} was in active_mounts but not actually mounted. ({absolute_destination})')
             if makedir and os.path.isdir(absolute_source):
                 os.makedirs(absolute_destination, exist_ok=True)
             result = mount(absolute_source, absolute_destination, options=options, fs_type=fs_type, register_unmount=False)
@@ -425,7 +432,7 @@ class Chroot:
         atexit.register(self.deactivate)
         self.mount(source_path, '/', fs_type=fs_type, options=options)
 
-    def mount_crossdirect(self, native_chroot: Chroot = None):
+    def mount_crossdirect(self, native_chroot: Chroot = None, fail_if_mounted: bool = False):
         """
         mount `native_chroot` at `target_chroot`/native
         returns the absolute path that `native_chroot` has been mounted at.
@@ -470,7 +477,7 @@ class Chroot:
 
         os.makedirs(native_mount, exist_ok=True)
         logging.debug(f'Mounting {native_chroot.name} to {native_mount}')
-        self.mount(native_chroot.path, 'native')
+        self.mount(native_chroot.path, 'native', fail_if_mounted=fail_if_mounted)
         return native_mount
 
     def mount_pkgbuilds(self, fail_if_mounted: bool = False) -> str:
