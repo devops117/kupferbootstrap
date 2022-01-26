@@ -204,9 +204,9 @@ class Chroot:
                     '-W',
                     '-x',
                     '--exclude',
-                    'pkgbuilds',
+                    CHROOT_PATHS['pkgbuilds'].strip('/'),
                     '--exclude',
-                    'prebuilts',
+                    CHROOT_PATHS['packages'].strip('/'),
                     f'{base_chroot.path}/',
                     f'{self.path}/',
                 ])

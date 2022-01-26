@@ -29,6 +29,6 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-RUN python -c "import constants; repos='\n'.join(['\n'.join(['', f'[{repo}]', f'Server = file:///prebuilts/\$arch/\$repo']) for repo in constants.REPOSITORIES]); print(repos)" | tee -a /etc/pacman.conf
+RUN python -c "import constants; repos='\n'.join(['\n'.join(['', f'[{repo}]', f'Server = file://{constants.CHROOT_PATHS['packages']}/\$arch/\$repo']) for repo in constants.REPOSITORIES]); print(repos)" | tee -a /etc/pacman.conf
 
 WORKDIR /
