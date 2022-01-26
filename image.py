@@ -220,10 +220,11 @@ def cmd_image():
 
 
 @cmd_image.command(name='build')
-def cmd_build():
+@click.argument('profile_name', required=False)
+def cmd_build(profile_name: str = None):
     enforce_wrap()
-    profile = config.get_profile()
-    device, flavour = get_device_and_flavour()
+    profile = config.get_profile(profile_name)
+    device, flavour = get_device_and_flavour(profile_name)
     post_cmds = FLAVOURS[flavour].get('post_cmds', [])
 
     # TODO: PARSE DEVICE ARCH AND SECTOR SIZE
