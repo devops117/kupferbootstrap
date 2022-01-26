@@ -495,10 +495,10 @@ class Chroot:
         packages = config.get_path('packages')
         return self.mount(absolute_source=packages, relative_destination=packages.lstrip('/'), fail_if_mounted=fail_if_mounted)
 
-    def mount_crosscompile(self, foreign_chroot: Chroot):
+    def mount_crosscompile(self, foreign_chroot: Chroot, fail_if_mounted: bool = False):
         mount_dest = os.path.join('chroot', os.path.basename(foreign_chroot.path))
         os.makedirs(os.path.join(self.path, mount_dest), exist_ok=True)
-        return self.mount(absolute_source=foreign_chroot.path, relative_destination=mount_dest)
+        return self.mount(absolute_source=foreign_chroot.path, relative_destination=mount_dest, fail_if_mounted=fail_if_mounted)
 
     def write_makepkg_conf(self, target_arch: Arch, cross_chroot_relative: str, cross: bool = True) -> str:
         """
