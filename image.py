@@ -10,7 +10,7 @@ from chroot import Chroot, get_device_chroot
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config
 from distro import get_base_distro, get_kupfer_https, get_kupfer_local
-from packages import build_enable_qemu_binfmt
+from packages import build_enable_qemu_binfmt, discover_packages, build_packages
 from ssh import copy_ssh_keys
 from wrapper import enforce_wrap
 from signal import pause
@@ -221,7 +221,8 @@ def cmd_image():
 
 @cmd_image.command(name='build')
 @click.argument('profile_name', required=False)
-def cmd_build(profile_name: str = None):
+@click.option('--build-pkgs/--no-build-pkgs', '-p/-P', default=True, help='Whether to build missing/outdated packages. Defaults to true.')
+def cmd_build(profile_name: str = None, build_pkgs: bool = True):
     enforce_wrap()
     profile = config.get_profile(profile_name)
     device, flavour = get_device_and_flavour(profile_name)
@@ -239,6 +240,10 @@ def cmd_build(profile_name: str = None):
     else:
         extra_repos = get_kupfer_https(arch).repos
     packages = BASE_PACKAGES + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
+
+    if build_pkgs:
+        repo = discover_packages()
+        build_packages(repo, [p for name, p in repo.items() if name in packages], arch)
 
     chroot = get_device_chroot(device=device, flavour=flavour, arch=arch, packages=packages, extra_repos=extra_repos)
     image_path = get_image_path(chroot)
