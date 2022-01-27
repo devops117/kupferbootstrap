@@ -384,6 +384,7 @@ class Chroot:
         password='123456',
         groups=['network', 'video', 'audio', 'optical', 'storage', 'input', 'scanner', 'games', 'lp', 'rfkill', 'wheel'],
     ):
+        user = user or 'kupfer'
         install_script = f'''
             set -e
             if ! id -u "{user}" >/dev/null 2>&1; then

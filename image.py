@@ -228,6 +228,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True):
     device, flavour = get_device_and_flavour(profile_name)
     post_cmds = FLAVOURS[flavour].get('post_cmds', [])
 
+    user = profile['username'] or 'kupfer'
     # TODO: PARSE DEVICE ARCH AND SECTOR SIZE
     arch = 'aarch64'
     sector_size = 4096
@@ -304,13 +305,13 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True):
     chroot.initialize()
     chroot.activate()
     chroot.create_user(
-        user=profile['username'],
+        user=user,
         password=profile['password'],
     )
 
     copy_ssh_keys(
         chroot.path,
-        user=profile['username'],
+        user=user,
     )
     with open(os.path.join(chroot.path, 'etc', 'pacman.conf'), 'w') as file:
         file.write(get_base_distro(arch).get_pacman_conf(check_space=True, extra_repos=get_kupfer_https(arch).repos))
