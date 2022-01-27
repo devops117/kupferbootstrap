@@ -420,7 +420,7 @@ def setup_build_chroot(
     return chroot
 
 
-def setup_sources(package: Package, chroot: Chroot, makepkg_conf_path = '/etc/makepkg.conf', pkgbuilds_dir: str = None):
+def setup_sources(package: Package, chroot: Chroot, makepkg_conf_path='/etc/makepkg.conf', pkgbuilds_dir: str = None):
     pkgbuilds_dir = pkgbuilds_dir if pkgbuilds_dir else CHROOT_PATHS['pkgbuilds']
     makepkg_setup_args = [
         '--config',

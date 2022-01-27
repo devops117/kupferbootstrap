@@ -277,8 +277,10 @@ class Chroot:
         strict_cache_consistency: bool = False,
     ):
         """returns the absolute path `relative_target` was mounted at"""
+
         def log_or_exc(msg):
             log_or_exception(strict_cache_consistency, msg, log_level=logging.ERROR)
+
         relative_destination = relative_destination.lstrip('/')
         absolute_destination = self.get_path(relative_destination)
         pseudo_absolute = make_abs_path(relative_destination)
