@@ -191,13 +191,16 @@ def discover_packages() -> dict[str, Package]:
     return packages
 
 
-def filter_packages_by_paths(repo: dict[str, Package], paths: list[str]) -> list[Package]:
+def filter_packages_by_paths(repo: dict[str, Package], paths: list[str], allow_empty_results=True) -> list[Package]:
     if 'all' in paths:
         return repo.values()
     result = []
     for pkg in repo.values():
         if pkg.path in paths:
             result += [pkg]
+
+    if not allow_empty_results and not result:
+        raise Exception('No packages matched by paths: ' + ', '.join([f'"{p}"' for p in paths]))
     return result
 
 
@@ -567,7 +570,7 @@ def build_packages_by_paths(
 
     for _arch in set([arch, config.runtime['arch']]):
         init_prebuilts(_arch)
-    packages = filter_packages_by_paths(repo, paths)
+    packages = filter_packages_by_paths(repo, paths, allow_empty_results=False)
     return build_packages(
         repo,
         packages,
@@ -682,8 +685,9 @@ def cmd_clean():
 @cmd_packages.command(name='check')
 @click.argument('paths', nargs=-1)
 def cmd_check(paths):
+    enforce_wrap()
     paths = list(paths)
-    packages = filter_packages_by_paths(discover_packages(), paths)
+    packages = filter_packages_by_paths(discover_packages(), paths, allow_empty_results=False)
 
     for package in packages:
         name = package.name
