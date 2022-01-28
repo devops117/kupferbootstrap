@@ -454,6 +454,9 @@ class Chroot:
 
         native_mount = os.path.join(self.path, 'native')
         logging.debug(f'Activating crossdirect in {native_mount}')
+        native_chroot.mount_pacman_cache()
+        native_chroot.mount_packages()
+        native_chroot.activate()
         results = native_chroot.try_install_packages(CROSSDIRECT_PKGS + [gcc], refresh=True, allow_fail=False)
         if results[gcc].returncode != 0:
             logging.debug('Failed to install cross-compiler package {gcc}')
@@ -564,19 +567,21 @@ def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
             #TODO: arch = config.get_profile()[...]
             arch = 'aarch64'
         if type == 'base':
-            chroot = get_build_chroot(arch)
+            chroot = get_base_chroot(arch)
             if not os.path.exists(os.path.join(chroot.path, 'bin')):
                 chroot.init()
             chroot.initialized = True
         elif type == 'build':
-            chroot = get_build_chroot(arch)
+            chroot = get_build_chroot(arch, activate=True)
             if not os.path.exists(os.path.join(chroot.path, 'bin')):
                 chroot.init()
             chroot.initialized = True
+            chroot.mount_pkgbuilds()
             if config.file['build']['crossdirect'] and enable_crossdirect:
                 chroot.mount_crossdirect()
         else:
             raise Exception('Really weird bug')
 
+    chroot.activate()
     logging.debug(f'Starting shell in {chroot.name}:')
     chroot.run_cmd('bash', attach_tty=True)
