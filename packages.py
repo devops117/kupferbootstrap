@@ -15,14 +15,6 @@ from wrapper import enforce_wrap
 from utils import git
 from binfmt import register as binfmt_register
 
-makepkg_env = os.environ.copy() | {
-    'LANG': 'C',
-    'MAKEFLAGS': f"-j{multiprocessing.cpu_count() if config.file['build']['threads'] < 1 else config.file['build']['threads']}",
-    'QEMU_LD_PREFIX': '/usr/aarch64-unknown-linux-gnu'
-}
-
-makepkg_cross_env = makepkg_env | {'PACMAN': os.path.join(config.runtime['script_source_dir'], 'local/bin/pacman_aarch64')}
-
 makepkg_cmd = [
     'makepkg',
     '--noconfirm',
@@ -37,6 +29,21 @@ pacman_cmd = [
     '--overwrite=*',
     '--needed',
 ]
+
+
+def get_makepkg_env():
+    # has to be a function because calls to `config` must be done after config file was read
+    threads = config.file['build']['threads'] or multiprocessing.cpu_count()
+    return os.environ.copy() | {
+        'LANG': 'C',
+        'CARGO_BUILD_JOBS': str(threads),
+        'MAKEFLAGS': f"-j{threads}",
+        'QEMU_LD_PREFIX': '/usr/aarch64-unknown-linux-gnu',
+    }
+
+
+def get_makepkg_cross_env():
+    return get_makepkg_env() | {'PACMAN': os.path.join(config.runtime['script_source_dir'], 'local/bin/pacman_aarch64')}
 
 
 class Package:
@@ -465,8 +472,8 @@ def build_package(
         logging.info(f'Cross-compiling {package.path}')
         build_root = native_chroot
         makepkg_compile_opts += ['--nodeps']
-        #env = makepkg_cross_env
-        env = makepkg_env
+        #env = get_makepkg_cross_env()
+        env = deepcopy(get_makepkg_env())
         if enable_ccache:
             env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
         logging.info('Setting up dependencies for cross-compilation')
@@ -483,7 +490,7 @@ def build_package(
         logging.info(f'Host-compiling {package.path}')
         build_root = target_chroot
         makepkg_compile_opts += ['--syncdeps']
-        env = deepcopy(makepkg_env)
+        env = deepcopy(get_makepkg_env())
         if foreign_arch and enable_crossdirect and package.name not in CROSSDIRECT_PKGS:
             env['PATH'] = f"/native/usr/lib/crossdirect/{arch}:{env['PATH']}"
             target_chroot.mount_crossdirect(native_chroot)
