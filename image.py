@@ -6,6 +6,9 @@ import subprocess
 import click
 import logging
 
+from signal import pause
+from subprocess import run
+
 from chroot import Chroot, get_device_chroot
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config
@@ -13,7 +16,6 @@ from distro import get_base_distro, get_kupfer_https, get_kupfer_local
 from packages import build_enable_qemu_binfmt, discover_packages, build_packages
 from ssh import copy_ssh_keys
 from wrapper import enforce_wrap
-from signal import pause
 
 
 def shrink_fs(loop_device: str, file: str, sector_size: int):
@@ -109,7 +111,7 @@ def get_image_path(device_chroot: Chroot) -> str:
 
 
 def losetup_rootfs_image(image_path: str, sector_size: int) -> str:
-    logging.debug(f'Creating loop device for {image_path}')
+    logging.debug(f'Creating loop device for {image_path} with sector size {sector_size}')
     result = subprocess.run([
         'losetup',
         '-f',
@@ -119,7 +121,7 @@ def losetup_rootfs_image(image_path: str, sector_size: int) -> str:
         image_path,
     ])
     if result.returncode != 0:
-        logging.fatal(f'Failed create loop device for {image_path}')
+        logging.fatal(f'Failed to create loop device for {image_path}')
         exit(1)
 
     logging.debug(f'Finding loop device for {image_path}')
@@ -294,6 +296,8 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True):
             '-F',
             '-L',
             'kupfer_root',
+            '-N',
+            '100000',
             f'{loop_device}p2',
         ])
         if result.returncode != 0:
@@ -320,10 +324,22 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True):
         if result.returncode != 0:
             raise Exception('Error running post_cmds')
 
+    logging.info('Preparing to unmount chroot')
+    res = chroot.run_cmd('sync && umount /boot', attach_tty=True)
+    logging.debug(f'rc: {res}')
+    chroot.deactivate()
+
+    logging.debug(f'Unmounting rootfs at "{chroot.path}"')
+    res = run(['umount', chroot.path, '&&', 'sync'])
+    logging.debug(f'rc: {res.returncode}')
+
+    logging.info(f'Done! Image saved to {image_path}')
+
 
 @cmd_image.command(name='inspect')
 @click.option('--shell', '-s', is_flag=True)
 def cmd_inspect(shell: bool = False):
+    enforce_wrap()
     device, flavour = get_device_and_flavour()
     # TODO: get arch from profile
     arch = 'aarch64'
