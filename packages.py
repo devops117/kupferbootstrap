@@ -337,16 +337,17 @@ def add_file_to_repo(file_path: str, repo_name: str, arch: Arch):
     cache_file = os.path.join(pacman_cache_dir, file_name)
     if os.path.exists(cache_file):
         os.unlink(cache_file)
-    result = subprocess.run([
+    cmd = [
         'repo-add',
         '--remove',
-        '--prevent-downgrade',
         os.path.join(
             repo_dir,
             f'{repo_name}.db.tar.xz',
         ),
         target_file,
-    ])
+    ]
+    logging.debug(f'repo: running cmd: {cmd}')
+    result = subprocess.run(cmd)
     if result.returncode != 0:
         raise Exception(f'Failed add package {target_file} to repo {repo_name}')
     for ext in ['db', 'files']:
