@@ -458,9 +458,10 @@ def build_package(
     makepkg_conf_path = 'etc/makepkg.conf'
     repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
     foreign_arch = config.runtime['arch'] != arch
+    deps = (list(set(package.depends) - set(package.names)))
     target_chroot = setup_build_chroot(
         arch=arch,
-        extra_packages=(list(set(package.depends) - set(package.names))),
+        extra_packages=deps,
         clean_chroot=clean_chroot,
     )
     native_chroot = target_chroot if not foreign_arch else setup_build_chroot(
@@ -502,7 +503,12 @@ def build_package(
             if enable_ccache:
                 logging.debug('ccache enabled')
                 env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
+                deps += ['ccache']
             logging.debug(('Building for native arch. ' if not foreign_arch else '') + 'Skipping crossdirect.')
+        dep_install = target_chroot.try_install_packages(deps, allow_fail=False)
+        failed_deps = [name for name, res in dep_install.items() if res.returncode != 0]
+        if failed_deps:
+            raise Exception(f'Dependencies failed to install: {failed_deps}')
 
     makepkg_conf_absolute = os.path.join('/', makepkg_conf_path)
     setup_sources(package, build_root, makepkg_conf_path=makepkg_conf_absolute)
