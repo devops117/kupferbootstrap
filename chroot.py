@@ -7,10 +7,9 @@ from glob import glob
 from shutil import rmtree
 
 from config import config
-from distro import get_base_distro, RepoInfo
+from distro import get_base_distro, get_kupfer_local, RepoInfo
 from shlex import quote as shell_quote
 from utils import mount, umount, check_findmnt, log_or_exception
-from distro import get_kupfer_local
 from wrapper import enforce_wrap
 from constants import Arch, GCC_HOSTSPECS, CROSSDIRECT_PKGS, BASE_PACKAGES, CHROOT_PATHS
 from generator import generate_makepkg_conf
@@ -158,9 +157,9 @@ class Chroot:
             copy_base = (name == base_chroot_name(arch))
         self.name = name
         self.arch = arch
-        self.path = os.path.join(config.get_path('chroots'), name) if not path_override else path_override
+        self.path = path_override or os.path.join(config.get_path('chroots'), name)
         self.copy_base = copy_base
-        self.extra_repos |= extra_repos
+        self.extra_repos = extra_repos.copy()
         self.base_packages = base_packages
         if initialize:
             self.initialize()
