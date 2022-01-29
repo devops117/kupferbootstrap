@@ -415,14 +415,15 @@ def setup_build_chroot(
     add_kupfer_repos: bool = True,
     clean_chroot: bool = False,
 ) -> Chroot:
+    init_prebuilts(arch)
     chroot = get_build_chroot(arch, add_kupfer_repos=add_kupfer_repos)
+    chroot.mount_packages()
     logging.info(f'Initializing {arch} build chroot')
     chroot.initialize(reset=clean_chroot)
     chroot.write_pacman_conf()  # in case it was initialized with different repos
     chroot.activate()
     chroot.mount_pacman_cache()
     chroot.mount_pkgbuilds()
-    chroot.mount_packages()
     if extra_packages:
         chroot.try_install_packages(extra_packages, allow_fail=False)
     return chroot
@@ -468,6 +469,8 @@ def build_package(
         clean_chroot=clean_chroot,
     )
     cross = foreign_arch and package.mode == 'cross' and enable_crosscompile
+
+    target_chroot.initialize()
 
     if cross:
         logging.info(f'Cross-compiling {package.path}')

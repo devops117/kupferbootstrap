@@ -163,6 +163,8 @@ class Chroot:
         self.base_packages = base_packages
         if initialize:
             self.initialize()
+        if self.name.startswith(BASE_CHROOT_PREFIX) and set(get_kupfer_local(self.arch).repos).intersection(set(self.extra_repos)):
+            raise Exception(f'Base chroot {self.name} had local repos specified: {self.extra_repos}')
 
     # TODO: when we go multithreaded, activate() and initialize() probably need a reader-writer lock
 
@@ -453,6 +455,7 @@ class Chroot:
 
         native_mount = os.path.join(self.path, 'native')
         logging.debug(f'Activating crossdirect in {native_mount}')
+        native_chroot.initialize()
         native_chroot.mount_pacman_cache()
         native_chroot.mount_packages()
         native_chroot.activate()
