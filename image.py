@@ -330,7 +330,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True):
     chroot.deactivate()
 
     logging.debug(f'Unmounting rootfs at "{chroot.path}"')
-    res = run(['umount', chroot.path, '&&', 'sync'])
+    res = run(['umount', chroot.path])
     logging.debug(f'rc: {res.returncode}')
 
     logging.info(f'Done! Image saved to {image_path}')
