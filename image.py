@@ -172,15 +172,15 @@ def mount_rootfs_loop_device(loop_device, chroot: Chroot):
 
 
 def dump_bootimg(image_path: str) -> str:
-    path = '/tmp/boot.img'
+    path = '/tmp/aboot.img'
     result = subprocess.run([
         'debugfs',
         image_path,
         '-R',
-        f'dump /boot.img {path}',
+        f'dump /aboot.img {path}',
     ])
     if result.returncode != 0:
-        logging.fatal('Failed to dump boot.img')
+        logging.fatal('Failed to dump aboot.img')
         exit(1)
     return path
 
