@@ -6,9 +6,8 @@ import click
 import tempfile
 
 from constants import FLASH_PARTS, LOCATIONS
-from chroot import get_device_chroot
 from fastboot import fastboot_flash
-from image import partprobe, shrink_fs, losetup_rootfs_image, dump_aboot, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name, get_image_path
+from image import dd_image, partprobe, shrink_fs, losetup_rootfs_image, dump_aboot, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name, get_image_path
 from wrapper import enforce_wrap
 
 ABOOT = FLASH_PARTS['ABOOT']
@@ -23,9 +22,8 @@ ROOTFS = FLASH_PARTS['ROOTFS']
 def cmd_flash(what, location):
     enforce_wrap()
     device, flavour = get_device_and_flavour()
-    chroot = get_device_chroot(device, flavour, 'aarch64')
-    device_image_name = get_image_name(chroot)
-    device_image_path = get_image_path(chroot)
+    device_image_name = get_image_name(device, flavour)
+    device_image_path = get_image_path(device, flavour)
 
     # TODO: PARSE DEVICE SECTOR SIZE
     sector_size = 4096
@@ -73,16 +71,8 @@ def cmd_flash(what, location):
         partprobe(loop_device)
         shrink_fs(loop_device, minimal_image_path, sector_size)
 
-        result = subprocess.run([
-            'dd',
-            f'if={minimal_image_path}',
-            f'of={path}',
-            'bs=20M',
-            'iflag=direct',
-            'oflag=direct',
-            'status=progress',
-            'conv=sync,noerror',
-        ])
+        result = dd_image(input=minimal_image_path, output=path)
+
         if result.returncode != 0:
             raise Exception(f'Failed to flash {minimal_image_path} to {path}')
     else:

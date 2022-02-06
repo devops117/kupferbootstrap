@@ -7,7 +7,7 @@ import click
 import logging
 
 from signal import pause
-from subprocess import run
+from subprocess import run, CompletedProcess
 
 from chroot import Chroot, get_device_chroot
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
@@ -16,6 +16,23 @@ from distro import get_base_distro, get_kupfer_https, get_kupfer_local
 from packages import build_enable_qemu_binfmt, discover_packages, build_packages
 from ssh import copy_ssh_keys
 from wrapper import enforce_wrap
+
+# image files need to be slightly smaller than partitions to fit
+IMG_FILE_ROOT_DEFAULT_SIZE = "1800M"
+IMG_FILE_BOOT_DEFAULT_SIZE = "90M"
+
+
+def dd_image(input: str, output: str, blocksize='1M') -> CompletedProcess:
+    return subprocess.run([
+        'dd',
+        f'if={input}',
+        f'of={output}',
+        f'bs={blocksize}',
+        'iflag=direct',
+        'oflag=direct',
+        'status=progress',
+        'conv=sync,noerror',
+    ])
 
 
 def partprobe(device: str):
@@ -109,12 +126,12 @@ def get_device_and_flavour(profile: str = None) -> tuple[str, str]:
     return (profile['device'], profile['flavour'])
 
 
-def get_image_name(device_chroot: Chroot) -> str:
-    return f'{device_chroot.name}.img'
+def get_image_name(device, flavour, img_type='full') -> str:
+    return f'{device}-{flavour}-{img_type}.img'
 
 
-def get_image_path(device_chroot: Chroot) -> str:
-    return os.path.join(config.get_path('images'), get_image_name(device_chroot))
+def get_image_path(device, flavour, img_type='full') -> str:
+    return os.path.join(config.get_path('images'), get_image_name(device, flavour, img_type))
 
 
 def losetup_rootfs_image(image_path: str, sector_size: int) -> str:
@@ -224,94 +241,67 @@ def dump_qhypstub(image_path: str) -> str:
     return path
 
 
-@click.group(name='image')
-def cmd_image():
-    pass
+def create_img_file(image_path: str, size_str: str):
+    result = subprocess.run([
+        'truncate',
+        '-s',
+        size_str,
+        image_path,
+    ])
+    if result.returncode != 0:
+        raise Exception(f'Failed to allocate {image_path}')
+    return image_path
 
 
-@cmd_image.command(name='build')
-@click.argument('profile_name', required=False)
-@click.option('--build-pkgs/--no-build-pkgs', '-p/-P', default=True, help='Whether to build missing/outdated packages. Defaults to true.')
-def cmd_build(profile_name: str = None, build_pkgs: bool = True):
-    enforce_wrap()
-    profile = config.get_profile(profile_name)
-    device, flavour = get_device_and_flavour(profile_name)
-    post_cmds = FLAVOURS[flavour].get('post_cmds', [])
+def partition_device(device: str):
+    boot_partition_size = '100MiB'
+    create_partition_table = ['mklabel', 'msdos']
+    create_boot_partition = ['mkpart', 'primary', 'ext2', '0%', boot_partition_size]
+    create_root_partition = ['mkpart', 'primary', boot_partition_size, '100%']
+    enable_boot = ['set', '1', 'boot', 'on']
+    result = subprocess.run([
+        'parted',
+        '--script',
+        device,
+    ] + create_partition_table + create_boot_partition + create_root_partition + enable_boot)
+    if result.returncode != 0:
+        raise Exception(f'Failed to create partitions on {device}')
 
+
+def create_root_fs(device: str):
+    result = subprocess.run([
+        'mkfs.ext4',
+        '-O',
+        '^metadata_csum',
+        '-F',
+        '-L',
+        'kupfer_root',
+        '-N',
+        '100000',
+        device,
+    ])
+    if result.returncode != 0:
+        raise Exception(f'Failed to create ext4 filesystem on {device}')
+
+
+def create_boot_fs(device: str):
+    result = subprocess.run([
+        'mkfs.ext2',
+        '-F',
+        '-L',
+        'kupfer_boot',
+        device,
+    ])
+    if result.returncode != 0:
+        raise Exception(f'Failed to create ext2 filesystem on {device}')
+
+
+def install_rootfs(rootfs_device: str, bootfs_device: str, device, flavour, arch, packages, extra_repos, profile):
     user = profile['username'] or 'kupfer'
-    # TODO: PARSE DEVICE ARCH AND SECTOR SIZE
-    arch = 'aarch64'
-    sector_size = 4096
-
-    build_enable_qemu_binfmt(arch)
-
-    packages_dir = config.get_package_dir(arch)
-    if os.path.exists(os.path.join(packages_dir, 'main')):
-        extra_repos = get_kupfer_local(arch).repos
-    else:
-        extra_repos = get_kupfer_https(arch).repos
-    packages = BASE_PACKAGES + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
-
-    if build_pkgs:
-        repo = discover_packages()
-        build_packages(repo, [p for name, p in repo.items() if name in packages], arch)
-
+    post_cmds = FLAVOURS[flavour].get('post_cmds', [])
     chroot = get_device_chroot(device=device, flavour=flavour, arch=arch, packages=packages, extra_repos=extra_repos)
-    image_path = get_image_path(chroot)
 
-    os.makedirs(config.get_path('images'), exist_ok=True)
-    new_image = not os.path.exists(image_path)
-    if new_image:
-        result = subprocess.run([
-            'truncate',
-            '-s',
-            f"{FLAVOURS[flavour].get('size',2)}G",
-            image_path,
-        ])
-        if result.returncode != 0:
-            raise Exception(f'Failed to allocate {image_path}')
-
-    loop_device = losetup_rootfs_image(image_path, sector_size)
-
-    if new_image:
-        boot_partition_size = '100MiB'
-        create_partition_table = ['mklabel', 'msdos']
-        create_boot_partition = ['mkpart', 'primary', 'ext2', '0%', boot_partition_size]
-        create_root_partition = ['mkpart', 'primary', boot_partition_size, '100%']
-        enable_boot = ['set', '1', 'boot', 'on']
-        result = subprocess.run([
-            'parted',
-            '--script',
-            loop_device,
-        ] + create_partition_table + create_boot_partition + create_root_partition + enable_boot)
-        if result.returncode != 0:
-            raise Exception(f'Failed to create partitions on {loop_device}')
-        partprobe(loop_device)
-        result = subprocess.run([
-            'mkfs.ext2',
-            '-F',
-            '-L',
-            'kupfer_boot',
-            f'{loop_device}p1',
-        ])
-        if result.returncode != 0:
-            raise Exception(f'Failed to create ext2 filesystem on {loop_device}p1')
-
-        result = subprocess.run([
-            'mkfs.ext4',
-            '-O',
-            '^metadata_csum',
-            '-F',
-            '-L',
-            'kupfer_root',
-            '-N',
-            '100000',
-            f'{loop_device}p2',
-        ])
-        if result.returncode != 0:
-            raise Exception(f'Failed to create ext4 filesystem on {loop_device}p2')
-
-    mount_chroot(loop_device + 'p2', loop_device + 'p1', chroot)
+    mount_chroot(rootfs_device, bootfs_device, chroot)
 
     chroot.mount_pacman_cache()
     chroot.initialize()
@@ -341,6 +331,85 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True):
     res = run(['umount', chroot.path])
     logging.debug(f'rc: {res.returncode}')
 
+
+@click.group(name='image')
+def cmd_image():
+    pass
+
+
+@cmd_image.command(name='build')
+@click.argument('profile_name', required=False)
+@click.option('--build-pkgs/--no-build-pkgs', '-p/-P', default=True, help='Whether to build missing/outdated packages. Defaults to true.')
+@click.option('--block-target', default=None, help='Override the block device file to target')
+@click.option('--skip-part-images', default=False, help='Skip creating image files for the partitions and directly work on the target block device.')
+def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: str = None, skip_part_images: bool = False):
+    enforce_wrap()
+    profile = config.get_profile(profile_name)
+    device, flavour = get_device_and_flavour(profile_name)
+
+    # TODO: PARSE DEVICE ARCH AND SECTOR SIZE
+    arch = 'aarch64'
+    sector_size = 4096
+    rootfs_size_gb = FLAVOURS[flavour].get('size', 2)
+
+    build_enable_qemu_binfmt(arch)
+
+    packages_dir = config.get_package_dir(arch)
+    if os.path.exists(os.path.join(packages_dir, 'main')):
+        extra_repos = get_kupfer_local(arch).repos
+    else:
+        extra_repos = get_kupfer_https(arch).repos
+    packages = BASE_PACKAGES + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
+
+    if build_pkgs:
+        repo = discover_packages()
+        build_packages(repo, [p for name, p in repo.items() if name in packages], arch)
+
+    image_path = block_target or get_image_path(device, flavour)
+
+    os.makedirs(os.path.dirname(image_path), exist_ok=True)
+    new_image = not os.path.exists(image_path)
+    if new_image:
+        logging.info(f'Creating new file at {image_path}')
+        create_img_file(image_path, f"{rootfs_size_gb}G")
+
+    loop_device = losetup_rootfs_image(image_path, sector_size)
+
+    partition_device(loop_device)
+    partprobe(loop_device)
+
+    boot_dev, root_dev = None, None
+    loop_boot = loop_device + 'p1'
+    loop_root = loop_device + 'p2'
+    if skip_part_images:
+        boot_dev = loop_boot
+        root_dev = loop_root
+    else:
+        logging.info('Creating per-partition image files')
+        boot_dev = create_img_file(get_image_path(device, flavour, 'boot'), IMG_FILE_BOOT_DEFAULT_SIZE)
+        root_dev = create_img_file(get_image_path(device, flavour, 'root'), f'{rootfs_size_gb * 1000 - 200}M')
+
+    create_boot_fs(boot_dev)
+    create_root_fs(root_dev)
+
+    install_rootfs(
+        root_dev,
+        boot_dev,
+        device,
+        flavour,
+        arch,
+        packages,
+        extra_repos,
+        profile,
+    )
+
+    if not skip_part_images:
+        logging.info('Copying partition image files into full image:')
+        logging.info(f'Block-copying /boot to {image_path}')
+        dd_image(input=boot_dev, output=loop_boot)
+        logging.info(f'Block-copying rootfs to {image_path}')
+        dd_image(input=root_dev, output=loop_root)
+
     logging.info(f'Done! Image saved to {image_path}')
 
 
@@ -354,7 +423,7 @@ def cmd_inspect(shell: bool = False):
     # TODO: PARSE DEVICE SECTOR SIZE
     sector_size = 4096
     chroot = get_device_chroot(device, flavour, arch)
-    image_path = get_image_path(chroot)
+    image_path = get_image_path(device, flavour)
     loop_device = losetup_rootfs_image(image_path, sector_size)
     partprobe(loop_device)
     mount_chroot(loop_device + 'p2', loop_device + 'p1', chroot)
