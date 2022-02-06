@@ -58,7 +58,7 @@ FLAVOURS = {
             'iio-sensor-proxy',
         ],
         'post_cmds': ['systemctl enable phosh'],
-        'size': 3,
+        'size': 4,
     }
 }
 
