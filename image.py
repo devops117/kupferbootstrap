@@ -159,16 +159,16 @@ def losetup_rootfs_image(image_path: str, sector_size: int) -> str:
     return loop_device
 
 
-def mount_rootfs_loop_device(loop_device, chroot: Chroot):
-    logging.debug(f'Mounting {loop_device}p2 at {chroot.path}')
+def mount_chroot(rootfs_source: str, boot_src: str, chroot: Chroot):
+    logging.debug(f'Mounting {rootfs_source} at {chroot.path}')
 
-    chroot.mount_rootfs(loop_device + 'p2')
+    chroot.mount_rootfs(rootfs_source)
     assert (os.path.ismount(chroot.path))
 
     os.makedirs(chroot.get_path('boot'), exist_ok=True)
 
-    logging.debug(f'Mounting {loop_device}p1 at {chroot.path}/boot')
-    chroot.mount(loop_device + 'p1', '/boot', options=['defaults'])
+    logging.debug(f'Mounting {boot_src} at {chroot.path}/boot')
+    chroot.mount(boot_src, '/boot', options=['defaults'])
 
 
 def dump_bootimg(image_path: str) -> str:
@@ -303,7 +303,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True):
         if result.returncode != 0:
             raise Exception(f'Failed to create ext4 filesystem on {loop_device}p2')
 
-    mount_rootfs_loop_device(loop_device, chroot)
+    mount_chroot(loop_device + 'p2', loop_device + 'p1', chroot)
 
     chroot.mount_pacman_cache()
     chroot.initialize()
@@ -349,7 +349,7 @@ def cmd_inspect(shell: bool = False):
     image_path = get_image_path(chroot)
     loop_device = losetup_rootfs_image(image_path, sector_size)
 
-    mount_rootfs_loop_device(loop_device, chroot)
+    mount_chroot(loop_device + 'p2', loop_device + 'p1', chroot)
 
     logging.info(f'Inspect the rootfs image at {chroot.path}')
 
