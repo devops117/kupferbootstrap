@@ -387,6 +387,7 @@ def check_package_version_built(package: Package, arch: Arch) -> bool:
         config_path,
         '--nobuild',
         '--noprepare',
+        '--skippgpcheck',
         '--packagelist',
     ]
     result = native_chroot.run_cmd(
@@ -437,6 +438,7 @@ def setup_sources(package: Package, chroot: Chroot, makepkg_conf_path='/etc/make
         '--nobuild',
         '--holdver',
         '--nodeps',
+        '--skippgpcheck',
     ]
 
     logging.info(f'Setting up sources for {package.path} in {chroot.name}')
@@ -513,7 +515,7 @@ def build_package(
     makepkg_conf_absolute = os.path.join('/', makepkg_conf_path)
     setup_sources(package, build_root, makepkg_conf_path=makepkg_conf_absolute)
 
-    build_cmd = f'makepkg --config {makepkg_conf_absolute} --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
+    build_cmd = f'makepkg --config {makepkg_conf_absolute} --skippgpcheck --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
     logging.debug(f'Building: Running {build_cmd}')
     result = build_root.run_cmd(build_cmd, inner_env=env, cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], package.path))
 
