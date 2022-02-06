@@ -8,7 +8,7 @@ import tempfile
 from constants import FLASH_PARTS, LOCATIONS
 from chroot import get_device_chroot
 from fastboot import fastboot_flash
-from image import shrink_fs, losetup_rootfs_image, dump_aboot, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name, get_image_path
+from image import partprobe, shrink_fs, losetup_rootfs_image, dump_aboot, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name, get_image_path
 from wrapper import enforce_wrap
 
 ABOOT = FLASH_PARTS['ABOOT']
@@ -70,6 +70,7 @@ def cmd_flash(what, location):
         shutil.copyfile(device_image_path, minimal_image_path)
 
         loop_device = losetup_rootfs_image(minimal_image_path, sector_size)
+        partprobe(loop_device)
         shrink_fs(loop_device, minimal_image_path, sector_size)
 
         result = subprocess.run([

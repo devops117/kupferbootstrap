@@ -18,6 +18,10 @@ from ssh import copy_ssh_keys
 from wrapper import enforce_wrap
 
 
+def partprobe(device: str):
+    return subprocess.run(['partprobe', device])
+
+
 def shrink_fs(loop_device: str, file: str, sector_size: int):
     # 8: 512 bytes sectors
     # 1: 4096 bytes sectors
@@ -66,6 +70,8 @@ def shrink_fs(loop_device: str, file: str, sector_size: int):
     if returncode > 1:
         raise Exception(f'Failed to shrink partition size of {loop_device}p2 with fdisk')
 
+    partprobe(loop_device)
+
     logging.debug(f'Finding end sector of partition at {loop_device}p2')
     result = subprocess.run(['fdisk', '-b', str(sector_size), '-l', loop_device], capture_output=True)
     if result.returncode != 0:
@@ -88,6 +94,7 @@ def shrink_fs(loop_device: str, file: str, sector_size: int):
     result = subprocess.run(['truncate', '-o', '-s', str(end_block), file])
     if result.returncode != 0:
         raise Exception(f'Failed to truncate {file}')
+    partprobe(loop_device)
 
 
 def get_device_and_flavour(profile: str = None) -> tuple[str, str]:
@@ -142,6 +149,7 @@ def losetup_rootfs_image(image_path: str, sector_size: int) -> str:
 
     if loop_device == '':
         raise Exception(f'Failed to find loop device for {image_path}')
+    partprobe(loop_device)
 
     def losetup_destroy():
         logging.debug(f'Destroying loop device {loop_device} for {image_path}')
@@ -278,7 +286,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True):
         ] + create_partition_table + create_boot_partition + create_root_partition + enable_boot)
         if result.returncode != 0:
             raise Exception(f'Failed to create partitions on {loop_device}')
-
+        partprobe(loop_device)
         result = subprocess.run([
             'mkfs.ext2',
             '-F',
@@ -348,7 +356,7 @@ def cmd_inspect(shell: bool = False):
     chroot = get_device_chroot(device, flavour, arch)
     image_path = get_image_path(chroot)
     loop_device = losetup_rootfs_image(image_path, sector_size)
-
+    partprobe(loop_device)
     mount_chroot(loop_device + 'p2', loop_device + 'p1', chroot)
 
     logging.info(f'Inspect the rootfs image at {chroot.path}')
