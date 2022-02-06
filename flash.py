@@ -8,10 +8,10 @@ import tempfile
 from constants import FLASH_PARTS, LOCATIONS
 from chroot import get_device_chroot
 from fastboot import fastboot_flash
-from image import shrink_fs, losetup_rootfs_image, dump_bootimg, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name, get_image_path
+from image import shrink_fs, losetup_rootfs_image, dump_aboot, dump_lk2nd, dump_qhypstub, get_device_and_flavour, get_image_name, get_image_path
 from wrapper import enforce_wrap
 
-BOOTIMG = FLASH_PARTS['BOOTIMG']
+ABOOT = FLASH_PARTS['ABOOT']
 LK2ND = FLASH_PARTS['LK2ND']
 QHYPSTUB = FLASH_PARTS['QHYPSTUB']
 ROOTFS = FLASH_PARTS['ROOTFS']
@@ -86,8 +86,8 @@ def cmd_flash(what, location):
             raise Exception(f'Failed to flash {minimal_image_path} to {path}')
     else:
         loop_device = losetup_rootfs_image(device_image_path, sector_size)
-        if what == BOOTIMG:
-            path = dump_bootimg(f'{loop_device}p1')
+        if what == ABOOT:
+            path = dump_aboot(f'{loop_device}p1')
             fastboot_flash('boot', path)
         elif what == LK2ND:
             path = dump_lk2nd(f'{loop_device}p1')

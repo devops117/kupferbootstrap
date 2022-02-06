@@ -171,7 +171,7 @@ def mount_chroot(rootfs_source: str, boot_src: str, chroot: Chroot):
     chroot.mount(boot_src, '/boot', options=['defaults'])
 
 
-def dump_bootimg(image_path: str) -> str:
+def dump_aboot(image_path: str) -> str:
     path = '/tmp/aboot.img'
     result = subprocess.run([
         'debugfs',

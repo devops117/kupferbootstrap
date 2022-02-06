@@ -1,7 +1,7 @@
 FASTBOOT = 'fastboot'
 FLASH_PARTS = {
     'ROOTFS': 'rootfs',
-    'BOOTIMG': 'bootimg',
+    'ABOOT': 'aboot',
     'LK2ND': 'lk2nd',
     'QHYPSTUB': 'qhypstub',
 }
