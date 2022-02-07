@@ -268,36 +268,31 @@ def partition_device(device: str):
         raise Exception(f'Failed to create partitions on {device}')
 
 
-def create_root_fs(device: str, blocksize: int):
-    result = subprocess.run([
-        'mkfs.ext4',
-        '-O',
-        '^metadata_csum',
+def create_filesystem(device: str, blocksize: int = 4096, label=None, options=[], fstype='ext4'):
+    # blocksize can be 4k max due to pagesize
+    blocksize = min(blocksize, 4096)
+    if fstype.startswith('ext'):
+        # blocksize for ext-fs must be >=1024
+        blocksize = max(blocksize, 1024)
+
+    labels = ['-L', label] if label else []
+    cmd = [
+        f'mkfs.{fstype}',
         '-F',
-        '-L',
-        'kupfer_root',
-        '-N',
-        '100000',
         '-b',
         str(blocksize),
-        device,
-    ])
+    ] + labels + [device]
+    result = subprocess.run(cmd)
     if result.returncode != 0:
-        raise Exception(f'Failed to create ext4 filesystem on {device}')
+        raise Exception(f'Failed to create {fstype} filesystem on {device} with CMD: {cmd}')
+
+
+def create_root_fs(device: str, blocksize: int):
+    create_filesystem(device, blocksize=blocksize, label='kupfer_root', options=['-O', '^metadata_csum', '-N', '100000'])
 
 
 def create_boot_fs(device: str, blocksize: int):
-    result = subprocess.run([
-        'mkfs.ext2',
-        '-F',
-        '-L',
-        'kupfer_boot',
-        '-b',
-        str(blocksize),
-        device,
-    ])
-    if result.returncode != 0:
-        raise Exception(f'Failed to create ext2 filesystem on {device}')
+    create_filesystem(device, blocksize=blocksize, label='kupfer_boot', fstype='ext2')
 
 
 def install_rootfs(rootfs_device: str, bootfs_device: str, device, flavour, arch, packages, extra_repos, profile):
@@ -437,7 +432,10 @@ def cmd_inspect(shell: bool = False):
     if shell:
         chroot.initialized = True
         chroot.activate()
-        build_enable_qemu_binfmt(arch)
+        if arch != config.runtime['arch']:
+            logging.info('Installing requisites for foreign-arch shell')
+            build_enable_qemu_binfmt(arch)
+        logging.info('Starting inspection shell')
         chroot.run_cmd('/bin/bash')
     else:
         pause()
