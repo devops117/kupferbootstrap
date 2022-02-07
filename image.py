@@ -268,7 +268,7 @@ def partition_device(device: str):
         raise Exception(f'Failed to create partitions on {device}')
 
 
-def create_root_fs(device: str):
+def create_root_fs(device: str, blocksize: int):
     result = subprocess.run([
         'mkfs.ext4',
         '-O',
@@ -278,18 +278,22 @@ def create_root_fs(device: str):
         'kupfer_root',
         '-N',
         '100000',
+        '-b',
+        str(blocksize),
         device,
     ])
     if result.returncode != 0:
         raise Exception(f'Failed to create ext4 filesystem on {device}')
 
 
-def create_boot_fs(device: str):
+def create_boot_fs(device: str, blocksize: int):
     result = subprocess.run([
         'mkfs.ext2',
         '-F',
         '-L',
         'kupfer_boot',
+        '-b',
+        str(blocksize),
         device,
     ])
     if result.returncode != 0:
@@ -389,8 +393,8 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
         boot_dev = create_img_file(get_image_path(device, flavour, 'boot'), IMG_FILE_BOOT_DEFAULT_SIZE)
         root_dev = create_img_file(get_image_path(device, flavour, 'root'), f'{rootfs_size_gb * 1000 - 200}M')
 
-    create_boot_fs(boot_dev)
-    create_root_fs(root_dev)
+    create_boot_fs(boot_dev, sector_size)
+    create_root_fs(root_dev, sector_size)
 
     install_rootfs(
         root_dev,
