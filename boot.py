@@ -18,7 +18,7 @@ TYPES = [LK2ND, JUMPDRIVE, ABOOT]
 @click.command(name='boot')
 @click.argument('type', required=False, default=ABOOT, type=click.Choice(TYPES))
 def cmd_boot(type):
-    f"""Flash one of {', '.join(TYPES)}"""
+    """Boot JumpDrive or the Kupfer aboot image. Erases Android DTBO in the process."""
     enforce_wrap()
     device, flavour = get_device_and_flavour()
     # TODO: parse arch and sector size

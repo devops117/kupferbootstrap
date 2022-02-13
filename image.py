@@ -333,6 +333,7 @@ def install_rootfs(rootfs_device: str, bootfs_device: str, device, flavour, arch
 
 @click.group(name='image')
 def cmd_image():
+    """Build and manage device images"""
     pass
 
 
@@ -342,6 +343,7 @@ def cmd_image():
 @click.option('--block-target', default=None, help='Override the block device file to target')
 @click.option('--skip-part-images', default=False, help='Skip creating image files for the partitions and directly work on the target block device.')
 def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: str = None, skip_part_images: bool = False):
+    """Build a device image"""
     enforce_wrap()
     profile = config.get_profile(profile_name)
     device, flavour = get_device_and_flavour(profile_name)
@@ -415,6 +417,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
 @cmd_image.command(name='inspect')
 @click.option('--shell', '-s', is_flag=True)
 def cmd_inspect(shell: bool = False):
+    """Open a shell in a device image"""
     enforce_wrap()
     device, flavour = get_device_and_flavour()
     # TODO: get arch from profile

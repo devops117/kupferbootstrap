@@ -7,6 +7,7 @@ from wrapper import check_programs_wrap
 
 @click.command(name='forwarding')
 def cmd_forwarding():
+    """Enable network forwarding for a usb-attached device"""
     check_programs_wrap(['syctl', 'iptables'])
 
     result = subprocess.run([

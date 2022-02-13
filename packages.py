@@ -627,21 +627,30 @@ def build_enable_qemu_binfmt(arch: Arch, repo: dict[str, Package] = None):
 
 @click.group(name='packages')
 def cmd_packages():
+    """Build and manage packages and PKGBUILDs"""
     pass
 
 
 @cmd_packages.command(name='update')
 @click.option('--non-interactive', is_flag=True)
 def cmd_update(non_interactive: bool = False):
+    """Update PKGBUILDs git repo"""
     enforce_wrap()
     init_pkgbuilds(interactive=not non_interactive)
 
 
 @cmd_packages.command(name='build')
-@click.option('--force', is_flag=True, default=False)
-@click.option('--arch', default=None)
+@click.option('--force', is_flag=True, default=False, help='Rebuild even if package is already built')
+@click.option('--arch', default=None, help="The CPU architecture to build for")
 @click.argument('paths', nargs=-1)
 def cmd_build(paths: list[str], force=False, arch=None):
+    """
+    Build packages by paths.
+
+    The paths are specified relative to the PKGBUILDs dir, eg. "cross/crossdirect".
+
+    Multiple paths may be specified as separate arguments.
+    """
     build(paths, force, arch)
 
 
@@ -673,6 +682,7 @@ def build(paths: list[str], force: bool, arch: Arch):
 @cmd_packages.command(name='sideload')
 @click.argument('paths', nargs=-1)
 def cmd_sideload(paths: list[str]):
+    """Build packages, copy to the device via SSH and install them"""
     files = build(paths, True, None)
     scp_put_files(files, '/tmp')
     run_ssh_command([
@@ -687,8 +697,14 @@ def cmd_sideload(paths: list[str]):
 
 
 @cmd_packages.command(name='clean')
-def cmd_clean():
+@click.option('--force', is_flag=True, default=False, help="Don't prompt for confirmation")
+def cmd_clean(force: bool = False):
+    """Remove files and directories not tracked in PKGBUILDs.git"""
     enforce_wrap()
+
+    warning = "Really reset PKGBUILDs to git state completely?\nThis will erase any untracked changes to your PKGBUILDs directory."
+    if not (force or click.confirm(warning)):
+        return
     result = git(
         [
             'clean',
@@ -704,6 +720,7 @@ def cmd_clean():
 @cmd_packages.command(name='check')
 @click.argument('paths', nargs=-1)
 def cmd_check(paths):
+    """Check that specified PKGBUILDs are formatted correctly"""
     enforce_wrap()
     paths = list(paths)
     packages = filter_packages_by_paths(discover_packages(), paths, allow_empty_results=False)

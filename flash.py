@@ -20,6 +20,7 @@ ROOTFS = FLASH_PARTS['ROOTFS']
 @click.argument('what', type=click.Choice(list(FLASH_PARTS.values())))
 @click.argument('location', required=False, type=click.Choice(LOCATIONS))
 def cmd_flash(what, location):
+    """Flash a partition onto a device"""
     enforce_wrap()
     device, flavour = get_device_and_flavour()
     device_image_name = get_image_name(device, flavour)

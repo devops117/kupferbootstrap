@@ -447,6 +447,7 @@ config_option = click.option(
 
 @click.group(name='config')
 def cmd_config():
+    """Manage the configuration and -profiles"""
     pass
 
 

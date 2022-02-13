@@ -550,6 +550,7 @@ class Chroot:
 @click.argument('type', required=False, default='build')
 @click.argument('arch', required=False, default=None)
 def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
+    """Open a shell in a chroot"""
     chroot_path = ''
     if type not in ['base', 'build', 'rootfs']:
         raise Exception('Unknown chroot type: ' + type)

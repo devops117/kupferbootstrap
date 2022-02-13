@@ -10,6 +10,7 @@ from wrapper import enforce_wrap
 
 @click.command(name='ssh')
 def cmd_ssh():
+    """Establish SSH connection over USB to device"""
     enforce_wrap()
     run_ssh_command()
 

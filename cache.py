@@ -10,6 +10,7 @@ PATHS = ['chroots', 'pacman', 'jumpdrive', 'packages', 'images']
 
 @click.group(name='cache')
 def cmd_cache():
+    """Clean caches and chroots"""
     pass
 
 
