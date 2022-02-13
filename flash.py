@@ -47,6 +47,7 @@ def cmd_flash(what, location):
                 sanitized_file = file.replace('-', '').replace('_', '').lower()
                 if f'jumpdrive{location.split("-")[0]}' in sanitized_file:
                     path = os.path.realpath(os.path.join(dir, file))
+                    partprobe(path)
                     result = subprocess.run(['lsblk', path, '-o', 'SIZE'], capture_output=True)
                     if result.returncode != 0:
                         raise Exception(f'Failed to lsblk {path}')
