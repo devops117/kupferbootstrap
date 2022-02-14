@@ -334,7 +334,6 @@ def install_rootfs(rootfs_device: str, bootfs_device: str, device, flavour, arch
 @click.group(name='image')
 def cmd_image():
     """Build and manage device images"""
-    pass
 
 
 @cmd_image.command(name='build')

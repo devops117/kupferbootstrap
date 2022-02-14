@@ -628,7 +628,6 @@ def build_enable_qemu_binfmt(arch: Arch, repo: dict[str, Package] = None):
 @click.group(name='packages')
 def cmd_packages():
     """Build and manage packages and PKGBUILDs"""
-    pass
 
 
 @cmd_packages.command(name='update')
