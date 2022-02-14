@@ -48,7 +48,7 @@ FLAVOURS = {
     'phosh': {
         'packages': [
             'phosh',
-            'squeekboard',
+            #'squeekboard', #temporarily disabled
             'gnome-control-center',
             'gnome-software',
             'gnome-software-packagekit-plugin',
@@ -58,7 +58,7 @@ FLAVOURS = {
             'iio-sensor-proxy',
         ],
         'post_cmds': ['systemctl enable phosh'],
-        'size': 4,
+        'size': 5,
     }
 }
 
