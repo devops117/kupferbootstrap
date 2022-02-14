@@ -369,10 +369,9 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
     image_path = block_target or get_image_path(device, flavour)
 
     os.makedirs(os.path.dirname(image_path), exist_ok=True)
-    new_image = not os.path.exists(image_path)
-    if new_image:
-        logging.info(f'Creating new file at {image_path}')
-        create_img_file(image_path, f"{rootfs_size_gb}G")
+
+    logging.info(f'Creating new file at {image_path}')
+    create_img_file(image_path, f"{rootfs_size_gb}G")
 
     loop_device = losetup_rootfs_image(image_path, sector_size)
 
