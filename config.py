@@ -565,7 +565,7 @@ def cmd_profile_init(name: str, non_interactive: bool = False, noop: bool = Fals
         profile |= config.file['profiles'][name]
 
     if not non_interactive:
-        profile = prompt_profile(name, create=True)
+        profile, _changed = prompt_profile(name, create=True)
 
     config.update_profile(name, profile)
     if not noop:
