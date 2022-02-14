@@ -415,10 +415,11 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
 
 @cmd_image.command(name='inspect')
 @click.option('--shell', '-s', is_flag=True)
-def cmd_inspect(shell: bool = False):
+@click.argument('profile')
+def cmd_inspect(profile: str = None, shell: bool = False):
     """Open a shell in a device image"""
     enforce_wrap()
-    device, flavour = get_device_and_flavour()
+    device, flavour = get_device_and_flavour(profile)
     # TODO: get arch from profile
     arch = 'aarch64'
     # TODO: PARSE DEVICE SECTOR SIZE
