@@ -69,7 +69,7 @@ def register(arch):
         raise Exception(f'Failed to register qemu-user for {arch} with binfmt_misc, {binfmt}/{info["name"]} not found')
 
 
-def unregister(args, arch):
+def unregister(arch):
     binfmt_file = "/proc/sys/fs/binfmt_misc/qemu-" + arch
     if not os.path.exists(binfmt_file):
         return
