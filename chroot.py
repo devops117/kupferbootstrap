@@ -399,7 +399,7 @@ class Chroot:
         if password:
             install_script += f'echo "{user}:{password}" | chpasswd'
         else:
-            install_script += 'echo "Set user password:" && passwd'
+            install_script += f'echo "Set user password:" && passwd {user}'
         result = self.run_cmd(install_script)
         if result.returncode != 0:
             raise Exception('Failed to setup user')
