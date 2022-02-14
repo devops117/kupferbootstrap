@@ -58,6 +58,7 @@ def wrap_docker():
                 '-t',
                 tag,
             ] + (['-q'] if not config.runtime['verbose'] else [])
+            logging.debug('Running docker cmd: ' + ' '.join(cmd))
             result = subprocess.run(cmd, cwd=script_path, capture_output=True)
             if result.returncode != 0:
                 logging.fatal('Failed to build docker image:\n' + result.stderr.decode())
