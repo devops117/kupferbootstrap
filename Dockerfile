@@ -1,6 +1,8 @@
 FROM archlinux:base-devel
 
-RUN pacman -Syu --noconfirm \
+RUN pacman-key --init && \
+    pacman -Sy --noconfirm archlinux-keyring && \
+    pacman -Su --noconfirm \
     python python-pip \
     arch-install-scripts rsync \
     aarch64-linux-gnu-gcc aarch64-linux-gnu-binutils aarch64-linux-gnu-glibc aarch64-linux-gnu-linux-api-headers \
