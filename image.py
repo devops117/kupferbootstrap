@@ -347,11 +347,12 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
     enforce_wrap()
     profile = config.get_profile(profile_name)
     device, flavour = get_device_and_flavour(profile_name)
+    size_extra_mb = profile["size_extra_mb"]
 
     # TODO: PARSE DEVICE ARCH AND SECTOR SIZE
     arch = 'aarch64'
     sector_size = 4096
-    rootfs_size_gb = FLAVOURS[flavour].get('size', 2)
+    rootfs_size_mb = FLAVOURS[flavour].get('size', 2) * 1000
 
     build_enable_qemu_binfmt(arch)
 
@@ -371,7 +372,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
     os.makedirs(os.path.dirname(image_path), exist_ok=True)
 
     logging.info(f'Creating new file at {image_path}')
-    create_img_file(image_path, f"{rootfs_size_gb}G")
+    create_img_file(image_path, f"{rootfs_size_mb + size_extra_mb}M")
 
     loop_device = losetup_rootfs_image(image_path, sector_size)
 
@@ -387,7 +388,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
     else:
         logging.info('Creating per-partition image files')
         boot_dev = create_img_file(get_image_path(device, flavour, 'boot'), IMG_FILE_BOOT_DEFAULT_SIZE)
-        root_dev = create_img_file(get_image_path(device, flavour, 'root'), f'{rootfs_size_gb * 1000 - 200}M')
+        root_dev = create_img_file(get_image_path(device, flavour, 'root'), f'{rootfs_size_mb + size_extra_mb - 200}M')
 
     create_boot_fs(boot_dev, sector_size)
     create_root_fs(root_dev, sector_size)

@@ -21,6 +21,7 @@ PROFILE_DEFAULTS: Profile = {
     'hostname': 'kupfer',
     'username': 'kupfer',
     'password': None,
+    'size_extra_mb': "0",
 }
 
 PROFILE_EMPTY: Profile = {key: None for key in PROFILE_DEFAULTS.keys()}
@@ -105,7 +106,13 @@ def resolve_profile(
     if 'parent' in sparse and (parent_name := sparse['parent']):
         parent = resolve_profile(name=parent_name, sparse_profiles=sparse_profiles, resolved=resolved, _visited=_visited)[parent_name]
         full = parent | sparse
-
+        # add up size_extra_mb
+        if 'size_extra_mb' in sparse:
+            size = sparse['size_extra_mb']
+            if isinstance(size, str) and size.startswith('+'):
+                full['size_extra_mb'] = int(parent.get('size_extra_mb', 0)) + int(size.lstrip('+'))
+            else:
+                full['size_extra_mb'] = int(sparse['size_extra_mb'])
         # join our includes with parent's
         includes = set(parent.get('pkgs_include', []) + sparse.get('pkgs_include', []))
         if 'pkgs_exclude' in sparse:
@@ -125,6 +132,8 @@ def resolve_profile(
             full[key] = None
             if type(value) == list:
                 full[key] = []
+
+    full['size_extra_mb'] = int(full['size_extra_mb'] or 0)
 
     resolved[name] = full
     return resolved
@@ -330,6 +339,8 @@ class ConfigStateHolder:
             if merge:
                 new = deepcopy(self.file['profiles'][name])
 
+        logging.debug(f'new: {new}')
+        logging.debug(f'profile: {profile}')
         new |= profile
 
         if prune:
