@@ -22,7 +22,7 @@ RUN yes | pacman -Scc
 
 RUN sed -i "s/SigLevel.*/SigLevel = Never/g" /etc/pacman.conf
 
-ENV KUPFERBOOTSTRAP_DOCKER=1
+ENV KUPFERBOOTSTRAP_WRAPPED=DOCKER
 ENV PATH=/app/bin:/app/local/bin:$PATH
 WORKDIR /app
 

@@ -151,3 +151,8 @@ CHROOT_PATHS = {
     'pkgbuilds': '/pkgbuilds',
     'images': '/images',
 }
+
+WRAPPER_TYPES = [
+    'none',
+    'docker',
+]

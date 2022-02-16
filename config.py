@@ -5,6 +5,8 @@ import logging
 from copy import deepcopy
 import click
 
+from constants import WRAPPER_TYPES
+
 CONFIG_DIR = appdirs.user_config_dir('kupfer')
 CACHE_DIR = appdirs.user_cache_dir('kupfer')
 
@@ -27,6 +29,9 @@ PROFILE_DEFAULTS: Profile = {
 PROFILE_EMPTY: Profile = {key: None for key in PROFILE_DEFAULTS.keys()}
 
 CONFIG_DEFAULTS = {
+    'wrapper': {
+        'type': 'docker',
+    },
     'build': {
         'ccache': True,
         'clean_mode': True,
