@@ -351,8 +351,8 @@ class Chroot:
                 script: str,
                 inner_env: dict[str, str] = {},
                 outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
-                attach_tty: str = False,
-                capture_output: str = False,
+                attach_tty: bool = False,
+                capture_output: bool = False,
                 cwd: str = None,
                 fail_inactive: bool = True,
                 stdout=None) -> subprocess.CompletedProcess:
