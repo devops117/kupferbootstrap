@@ -58,7 +58,52 @@ BASIC_MOUNTS = {
     },
 }
 
-Chroot = None
+
+class Chroot:
+    name: str
+    arch: str
+    path: str
+    initialized: bool
+
+    def __init__(
+        self,
+        name: str,
+        arch: Arch,
+        copy_base: bool = None,
+        initialize: bool = False,
+        extra_repos: dict[str, RepoInfo] = {},
+        base_packages: list[str] = ['base', 'base-devel', 'git'],
+        path_override: str = None,
+    ):
+        pass
+
+    def initialize(self, *args, **kwargs):
+        pass
+
+    def activate(self, *args, **kwargs):
+        pass
+
+    def get_path(self, *args, **kwargs):
+        pass
+
+    def run_cmd(self, *args, **kwargs):
+        pass
+
+    def mount_pacman_cache(self, *args, **kwargs):
+        pass
+
+    def mount_packages(self, *args, **kwargs):
+        pass
+
+    def mount_pkgbuilds(self, *args, **kwargs):
+        pass
+
+    def mount_crossdirect(self, *args, **kwargs):
+        pass
+
+    def try_install_packages(self, *args, **kwargs):
+        pass
+
 
 chroots: dict[str, Chroot] = {}
 
