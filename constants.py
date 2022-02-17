@@ -1,3 +1,5 @@
+from typing import TypeAlias
+
 FASTBOOT = 'fastboot'
 FLASH_PARTS = {
     'ROOTFS': 'rootfs',
@@ -72,13 +74,18 @@ REPOSITORIES = [
     'phosh',
 ]
 
-Arch = str
+KUPFER_HTTPS = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
+
+Arch: TypeAlias = str
 ARCHES = [
     'x86_64',
     'aarch64',
 ]
 
-BASE_DISTROS = {
+DistroArch: TypeAlias = Arch
+TargetArch: TypeAlias = Arch
+
+BASE_DISTROS: dict[DistroArch, dict[str, dict[str, str]]] = {
     'x86_64': {
         'repos': {
             'core': 'http://ftp.halifax.rwth-aachen.de/archlinux/$repo/os/$arch',
@@ -96,10 +103,6 @@ BASE_DISTROS = {
         },
     },
 }
-
-KUPFER_HTTPS = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
-
-DistroArch = TargetArch = Arch
 
 COMPILE_ARCHES: dict[Arch, str] = {
     'x86_64': 'amd64',
