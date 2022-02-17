@@ -13,6 +13,7 @@ from .package import PackageInfo
 class Pkgbuild(PackageInfo):
     depends: list[str] = None
     provides: list[str] = None
+    replaces: list[str] = None
     local_depends: list[PackageInfo] = None
     subpackages: list[PackageInfo] = None
     repo = ''
@@ -26,19 +27,21 @@ class Pkgbuild(PackageInfo):
         relative_path: str,
         depends: list[str] = [],
         provides: list[str] = [],
+        replaces: list[str] = [],
         subpackages: list[PackageInfo] = [],
     ) -> None:
         self.version = None
         self.path = relative_path
         self.depends = deepcopy(depends)
         self.provides = deepcopy(provides)
+        self.replaces = deepcopy(replaces)
         self.subpackages = deepcopy(subpackages)
 
     def __repr__(self):
         return f'Package({self.name},{repr(self.path)},{self.version},{self.mode})'
 
     def names(self):
-        return [self.name] + self.provides
+        return [self.name] + self.provides + self.replaces
 
 
 def parse_pkgbuild(relative_pkg_dir: str, native_chroot: Chroot) -> list[Pkgbuild]:
@@ -84,6 +87,8 @@ def parse_pkgbuild(relative_pkg_dir: str, native_chroot: Chroot) -> list[Pkgbuil
             current.pkgrel = splits[1]
         elif line.startswith('provides'):
             current.provides.append(splits[1])
+        elif line.startswith('replaces'):
+            current.replaces.append(splits[1])
         elif line.startswith('depends') or line.startswith('makedepends') or line.startswith('checkdepends') or line.startswith('optdepends'):
             current.depends.append(splits[1].split('=')[0].split(': ')[0])
     current.depends = list(set(current.depends))
