@@ -42,10 +42,6 @@ def get_makepkg_env():
     }
 
 
-def get_makepkg_cross_env():
-    return get_makepkg_env() | {'PACMAN': os.path.join(config.runtime['script_source_dir'], 'local/bin/pacman_aarch64')}
-
-
 class Package:
     name = ''
     names: list[str] = []
@@ -479,7 +475,6 @@ def build_package(
         logging.info(f'Cross-compiling {package.path}')
         build_root = native_chroot
         makepkg_compile_opts += ['--nodeps']
-        #env = get_makepkg_cross_env()
         env = deepcopy(get_makepkg_env())
         if enable_ccache:
             env['PATH'] = f"/usr/lib/ccache:{env['PATH']}"
