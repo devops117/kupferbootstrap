@@ -1,8 +1,6 @@
 from copy import deepcopy
-import logging
 import os
 import subprocess
-from typing import Generator
 
 from chroot import Chroot
 from constants import CHROOT_PATHS, MAKEPKG_CMD
@@ -41,7 +39,7 @@ class Pkgbuild(PackageInfo):
         return f'Package({self.name},{repr(self.path)},{self.version},{self.mode})'
 
     def names(self):
-        return [self.name] + self.provides + self.replaces
+        return list(set([self.name] + self.provides + self.replaces))
 
 
 def parse_pkgbuild(relative_pkg_dir: str, native_chroot: Chroot) -> list[Pkgbuild]:
@@ -95,7 +93,6 @@ def parse_pkgbuild(relative_pkg_dir: str, native_chroot: Chroot) -> list[Pkgbuil
 
     results = base_package.subpackages or [base_package]
     for pkg in results:
-        pkg.mode = mode
         pkg.version = f'{pkg.pkgver}-{pkg.pkgrel}'
         if not (pkg.pkgver == base_package.pkgver and pkg.pkgrel == base_package.pkgrel):
             raise Exception('subpackage malformed! pkgver differs!')

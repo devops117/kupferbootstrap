@@ -31,6 +31,6 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-RUN python -c "import distro; distro.get_kupfer_local(arch=None,in_chroot=False).repos_config_snippet()" | tee -a /etc/pacman.conf
+RUN python -c "from distro import distro; distro.get_kupfer_local(arch=None,in_chroot=False).repos_config_snippet()" | tee -a /etc/pacman.conf
 
 WORKDIR /

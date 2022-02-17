@@ -5,8 +5,6 @@ import logging
 from copy import deepcopy
 import click
 
-from constants import WRAPPER_TYPES
-
 CONFIG_DIR = appdirs.user_config_dir('kupfer')
 CACHE_DIR = appdirs.user_cache_dir('kupfer')
 
