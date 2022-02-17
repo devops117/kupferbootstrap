@@ -6,6 +6,8 @@ import shutil
 import subprocess
 from copy import deepcopy
 from joblib import Parallel, delayed
+from glob import glob
+from shutil import rmtree
 
 from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch, CHROOT_PATHS
 from config import config
@@ -691,24 +693,50 @@ def cmd_sideload(paths: list[str]):
 
 
 @cmd_packages.command(name='clean')
-@click.option('--force', is_flag=True, default=False, help="Don't prompt for confirmation")
-def cmd_clean(force: bool = False):
+@click.option('-f', '--force', is_flag=True, default=False, help="Don't prompt for confirmation")
+@click.option('-n', '--noop', is_flag=True, default=False, help="Print what would be removed but dont execute")
+@click.argument('what', type=click.Choice(['all', 'src', 'pkg']), nargs=-1)
+def cmd_clean(what: list[str] = ['all'], force: bool = False, noop: bool = False):
     """Remove files and directories not tracked in PKGBUILDs.git"""
     enforce_wrap()
+    if noop:
+        logging.debug('Running in noop mode!')
+    if force:
+        logging.debug('Running in FORCE mode!')
+    pkgbuilds = config.get_path('pkgbuilds')
+    if 'all' in what:
+        warning = "Really reset PKGBUILDs to git state completely?\nThis will erase any untracked changes to your PKGBUILDs directory."
+        if not (noop or force or click.confirm(warning)):
+            return
+        result = git(
+            [
+                'clean',
+                '-dffX' + ('n' if noop else ''),
+            ] + REPOSITORIES,
+            dir=pkgbuilds,
+        )
+        if result.returncode != 0:
+            logging.fatal('Failed to git clean')
+            exit(1)
+    else:
+        what = set(what)
+        dirs = []
+        for loc in ['pkg', 'src']:
+            if loc in what:
+                logging.info(f'gathering {loc} directories')
+                dirs += glob(os.path.join(pkgbuilds, '*', '*', loc))
 
-    warning = "Really reset PKGBUILDs to git state completely?\nThis will erase any untracked changes to your PKGBUILDs directory."
-    if not (force or click.confirm(warning)):
-        return
-    result = git(
-        [
-            'clean',
-            '-dffX',
-        ] + REPOSITORIES,
-        dir=config.get_path('pkgbuilds'),
-    )
-    if result.returncode != 0:
-        logging.fatal('Failed to git clean')
-        exit(1)
+        dir_lines = '\n'.join(dirs)
+        verb = 'Would remove' if noop or force else 'Removing'
+        logging.info(verb + ' directories:\n' + dir_lines)
+
+        if not (noop or force):
+            if not click.confirm("Really remove all of these?", default=True):
+                return
+
+        for dir in dirs:
+            if not noop:
+                rmtree(dir)
 
 
 @cmd_packages.command(name='check')
