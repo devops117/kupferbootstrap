@@ -19,7 +19,7 @@ def docker_volumes_args(volume_mappings: dict[str, str]) -> list[str]:
 
 
 class DockerWrapper(BaseWrapper):
-    type = 'docker'
+    type: str = 'docker'
 
     def wrap(self):
         script_path = config.runtime['script_source_dir']

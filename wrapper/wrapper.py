@@ -3,15 +3,33 @@ import os
 import uuid
 import pathlib
 
+from typing import Protocol
+
 from config import config, dump_file as dump_config_file
 from constants import CHROOT_PATHS
 
 
-class BaseWrapper:
-    id = None
-    identifier = None
-    type = None
-    wrapped_config_path = None
+class Wrapper(Protocol):
+    """Wrappers wrap kupferbootstrap in some form of isolation from the host OS, i.e. docker or chroots"""
+
+    def wrap(self):
+        """Instructs the wrapper to reexecute kupferbootstrap in a wrapped environment"""
+
+    def stop(self):
+        """Instructs the wrapper to stop the wrapped instance and clean up"""
+
+    def is_wrapped(self) -> bool:
+        """
+        Queries the wrapper whether it believes we're executing wrapped by it currently.
+        Checks `env[KUPFERBOOTSTRAP_WRAPPED] == self.type.capitalize()` by default.
+        """
+
+
+class BaseWrapper(Wrapper):
+    id: str
+    identifier: str
+    type: str
+    wrapped_config_path: str
 
     def __init__(self, random_id: str = None, name: str = None):
         self.uuid = str(random_id or uuid.uuid4())
@@ -49,6 +67,7 @@ class BaseWrapper:
     ) -> str:
         wrapped_config = f'{target_path.rstrip("/")}/{self.identifier}_wrapped.toml'
 
+        # FIXME: these at_exit hooks should go and be called from somewhere better suited
         def at_exit():
             self.stop()
             os.remove(wrapped_config)
@@ -72,6 +91,9 @@ class BaseWrapper:
 
     def stop(self):
         raise NotImplementedError()
+
+    def is_wrapped(self):
+        return os.getenv('KUPFERBOOTSTRAP_WRAPPED') == self.type.capitalize()
 
     def get_bind_mounts_default(self, wrapped_config_path: str = None, ssh_dir: str = None, target_home: str = '/root'):
         wrapped_config_path = wrapped_config_path or self.wrapped_config_path
