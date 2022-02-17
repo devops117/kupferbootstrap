@@ -243,10 +243,10 @@ class Chroot:
             # base chroot
             if reset:
                 logging.info(f'Resetting {self.name}')
-                for dir in glob(os.join(self.path, '*')):
+                for dir in glob(os.path.join(self.path, '*')):
                     rmtree(dir)
 
-            self.write_pacman_conf()
+            self.write_pacman_conf(check_space=True)
             self.mount_pacman_cache()
 
             logging.info(f'Pacstrapping chroot {self.name}: {", ".join(self.base_packages)}')
@@ -539,9 +539,9 @@ class Chroot:
             f.write(makepkg_cross_conf)
         return makepkg_conf_path_relative
 
-    def write_pacman_conf(self):
+    def write_pacman_conf(self, check_space: bool = False):
         os.makedirs(self.get_path('/etc'), exist_ok=True)
-        conf_text = get_base_distro(self.arch).get_pacman_conf(self.extra_repos)
+        conf_text = get_base_distro(self.arch).get_pacman_conf(self.extra_repos, check_space=check_space)
         with open(self.get_path('etc/pacman.conf'), 'w') as file:
             file.write(conf_text)
 

@@ -6,6 +6,7 @@ import tarfile
 import logging
 
 from constants import ARCHES, BASE_DISTROS, REPOSITORIES, KUPFER_HTTPS, CHROOT_PATHS
+from generator import generate_pacman_conf_body
 from config import config
 
 
@@ -133,77 +134,9 @@ class Distro:
         extras = [Repo(name, url_template=info.url_template, arch=self.arch, options=info.options, scan=False) for name, info in extra_repos.items()]
         return '\n\n'.join(repo.config_snippet() for repo in (list(self.repos.values()) + extras))
 
-    def get_pacman_conf(self, extra_repos: dict[str, RepoInfo] = {}, check_space=True):
-        header = f'''
-#
-# /etc/pacman.conf
-#
-# See the pacman.conf(5) manpage for option and repository directives
-
-#
-# GENERAL OPTIONS
-#
-[options]
-# The following paths are commented out with their default values listed.
-# If you wish to use different paths, uncomment and update the paths.
-#RootDir     = /
-#DBPath      = /var/lib/pacman/
-CacheDir    = {CHROOT_PATHS['pacman']}/{self.arch}
-#LogFile     = /var/log/pacman.log
-#GPGDir      = /etc/pacman.d/gnupg/
-#HookDir     = /etc/pacman.d/hooks/
-HoldPkg     = pacman glibc
-#XferCommand = /usr/bin/curl -L -C - -f -o %o %u
-#XferCommand = /usr/bin/wget --passive-ftp -c -O %o %u
-#CleanMethod = KeepInstalled
-Architecture = {self.arch}
-
-# Pacman won't upgrade packages listed in IgnorePkg and members of IgnoreGroup
-#IgnorePkg   =
-#IgnoreGroup =
-
-#NoUpgrade   =
-#NoExtract   =
-
-# Misc options
-#UseSyslog
-Color
-#NoProgressBar
-{'' if check_space else '#'}CheckSpace
-VerbosePkgLists
-ParallelDownloads = {config.file['pacman']['parallel_downloads']}
-
-# By default, pacman accepts packages signed by keys that its local keyring
-# trusts (see pacman-key and its man page), as well as unsigned packages.
-SigLevel    = Required DatabaseOptional
-LocalFileSigLevel = Optional
-#RemoteFileSigLevel = Required
-
-# NOTE: You must run `pacman-key --init` before first using pacman; the local
-# keyring can then be populated with the keys of all official Arch Linux ARM
-# packagers with `pacman-key --populate archlinuxarm`.
-
-#
-# REPOSITORIES
-#   - can be defined here or included from another file
-#   - pacman will search repositories in the order defined here
-#   - local/custom mirrors can be added here or in separate files
-#   - repositories listed first will take precedence when packages
-#     have identical names, regardless of version number
-#   - URLs will have $repo replaced by the name of the current repo
-#   - URLs will have $arch replaced by the name of the architecture
-#
-# Repository entries are of the format:
-#       [repo-name]
-#       Server = ServerName
-#       Include = IncludePath
-#
-# The header [repo-name] is crucial - it must be present and
-# uncommented to enable the repo.
-#
-
-'''
-        return header + self.repos_config_snippet(extra_repos)
+    def get_pacman_conf(self, extra_repos: dict[str, RepoInfo] = {}, check_space: bool = True):
+        body = generate_pacman_conf_body(self.arch, check_space=check_space)
+        return body + self.repos_config_snippet(extra_repos)
 
 
 def get_base_distro(arch: str) -> Distro:

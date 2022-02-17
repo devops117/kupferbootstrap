@@ -1,4 +1,4 @@
-from constants import Arch, GCC_HOSTSPECS, CFLAGS_GENERAL, CFLAGS_ARCHES, COMPILE_ARCHES
+from constants import Arch, GCC_HOSTSPECS, CFLAGS_GENERAL, CFLAGS_ARCHES, COMPILE_ARCHES, CHROOT_PATHS
 from config import config
 
 
@@ -187,3 +187,78 @@ export LDFLAGS="$LDFLAGS,-L/usr/{hostspec}/lib,-L/{chroot}/usr/lib,-rpath-link,/
 '''
 
     return conf
+
+
+def generate_pacman_conf_body(
+    arch: Arch,
+    check_space: bool = True,
+):
+    return f'''
+#
+# /etc/pacman.conf
+#
+# See the pacman.conf(5) manpage for option and repository directives
+
+#
+# GENERAL OPTIONS
+#
+[options]
+# The following paths are commented out with their default values listed.
+# If you wish to use different paths, uncomment and update the paths.
+#RootDir     = /
+#DBPath      = /var/lib/pacman/
+CacheDir    = {CHROOT_PATHS['pacman']}/{arch}
+#LogFile     = /var/log/pacman.log
+#GPGDir      = /etc/pacman.d/gnupg/
+#HookDir     = /etc/pacman.d/hooks/
+HoldPkg     = pacman glibc
+#XferCommand = /usr/bin/curl -L -C - -f -o %o %u
+#XferCommand = /usr/bin/wget --passive-ftp -c -O %o %u
+#CleanMethod = KeepInstalled
+Architecture = {arch}
+
+# Pacman won't upgrade packages listed in IgnorePkg and members of IgnoreGroup
+#IgnorePkg   =
+#IgnoreGroup =
+
+#NoUpgrade   =
+#NoExtract   =
+
+# Misc options
+#UseSyslog
+Color
+#NoProgressBar
+{'' if check_space else '#'}CheckSpace
+VerbosePkgLists
+ParallelDownloads = {config.file['pacman']['parallel_downloads']}
+
+# By default, pacman accepts packages signed by keys that its local keyring
+# trusts (see pacman-key and its man page), as well as unsigned packages.
+SigLevel    = Required DatabaseOptional
+LocalFileSigLevel = Optional
+#RemoteFileSigLevel = Required
+
+# NOTE: You must run `pacman-key --init` before first using pacman; the local
+# keyring can then be populated with the keys of all official Arch Linux ARM
+# packagers with `pacman-key --populate archlinuxarm`.
+
+#
+# REPOSITORIES
+#   - can be defined here or included from another file
+#   - pacman will search repositories in the order defined here
+#   - local/custom mirrors can be added here or in separate files
+#   - repositories listed first will take precedence when packages
+#     have identical names, regardless of version number
+#   - URLs will have $repo replaced by the name of the current repo
+#   - URLs will have $arch replaced by the name of the architecture
+#
+# Repository entries are of the format:
+#       [repo-name]
+#       Server = ServerName
+#       Include = IncludePath
+#
+# The header [repo-name] is crucial - it must be present and
+# uncommented to enable the repo.
+#
+
+'''
