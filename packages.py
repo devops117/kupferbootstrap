@@ -16,7 +16,7 @@ from ssh import run_ssh_command, scp_put_files
 from wrapper import enforce_wrap
 from utils import git
 from binfmt import register as binfmt_register
-from distro.pkgbuild import Pkgbuild as Package, parse_pkgbuild
+from distro.pkgbuild import Pkgbuild, parse_pkgbuild
 
 pacman_cmd = [
     'pacman',
@@ -94,7 +94,7 @@ def init_prebuilts(arch: Arch, dir: str = None):
                         exit(1)
 
 
-def discover_packages(parallel: bool = True) -> dict[str, Package]:
+def discover_packages(parallel: bool = True) -> dict[str, Pkgbuild]:
     pkgbuilds_dir = config.get_path('pkgbuilds')
     packages = {}
     paths = []
@@ -141,7 +141,7 @@ def discover_packages(parallel: bool = True) -> dict[str, Package]:
     return packages
 
 
-def filter_packages_by_paths(repo: dict[str, Package], paths: list[str], allow_empty_results=True) -> list[Package]:
+def filter_packages_by_paths(repo: dict[str, Pkgbuild], paths: list[str], allow_empty_results=True) -> list[Pkgbuild]:
     if 'all' in paths:
         return repo.values()
     result = []
@@ -154,26 +154,26 @@ def filter_packages_by_paths(repo: dict[str, Package], paths: list[str], allow_e
     return result
 
 
-def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[Package]) -> list[set[Package]]:
+def generate_dependency_chain(package_repo: dict[str, Pkgbuild], to_build: list[Pkgbuild]) -> list[set[Pkgbuild]]:
     """
     This figures out all dependencies and their sub-dependencies for the selection and adds those packages to the selection.
     First the top-level packages get selected by searching the paths.
     Then their dependencies and sub-dependencies and so on get added to the selection.
     """
-    visited = set[Package]()
+    visited = set[Pkgbuild]()
     visited_names = set[str]()
-    dep_levels: list[set[Package]] = [set(), set()]
+    dep_levels: list[set[Pkgbuild]] = [set(), set()]
 
-    def visit(package: Package, visited=visited, visited_names=visited_names):
+    def visit(package: Pkgbuild, visited=visited, visited_names=visited_names):
         visited.add(package)
         visited_names.update(package.names())
 
-    def join_levels(levels: list[set[Package]]) -> dict[Package, int]:
-        result = dict[Package, int]()
+    def join_levels(levels: list[set[Pkgbuild]]) -> dict[Pkgbuild, int]:
+        result = dict[Pkgbuild, int]()
         for i, level in enumerate(levels):
             result[level] = i
 
-    def get_dependencies(package: Package, package_repo: dict[str, Package] = package_repo) -> list[Package]:
+    def get_dependencies(package: Pkgbuild, package_repo: dict[str, Pkgbuild] = package_repo) -> list[Pkgbuild]:
         for dep_name in package.depends:
             if dep_name in visited_names:
                 continue
@@ -182,7 +182,7 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
                 visit(dep_pkg)
                 yield dep_pkg
 
-    def get_recursive_dependencies(package: Package, package_repo: dict[str, Package] = package_repo) -> list[Package]:
+    def get_recursive_dependencies(package: Pkgbuild, package_repo: dict[str, Pkgbuild] = package_repo) -> list[Pkgbuild]:
         for pkg in get_dependencies(package, package_repo):
             yield pkg
             for sub_pkg in get_recursive_dependencies(pkg, package_repo):
@@ -208,7 +208,7 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
     level = 0
     # protect against dependency cycles
     repeat_count = 0
-    _last_level: set[Package] = None
+    _last_level: set[Pkgbuild] = None
     while dep_levels[level]:
         level_copy = dep_levels[level].copy()
         modified = False
@@ -227,8 +227,8 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
                     continue
                 if pkg_done:
                     break
-                if type(other_pkg) != Package:
-                    raise Exception('Not a Package object:' + repr(other_pkg))
+                if not issubclass(type(other_pkg), Pkgbuild):
+                    raise Exception('Not a Pkgbuild object:' + repr(other_pkg))
                 for dep_name in other_pkg.depends:
                     if dep_name in pkg.names():
                         dep_levels[level].remove(pkg)
@@ -256,7 +256,7 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
         _last_level = dep_levels[level].copy()
         if not modified:  # if the level was modified, make another pass.
             level += 1
-            dep_levels.append(set[Package]())
+            dep_levels.append(set[Pkgbuild]())
     # reverse level list into buildorder (deps first!), prune empty levels
     return list([lvl for lvl in dep_levels[::-1] if lvl])
 
@@ -303,7 +303,7 @@ def add_file_to_repo(file_path: str, repo_name: str, arch: Arch):
             os.unlink(old)
 
 
-def add_package_to_repo(package: Package, arch: Arch):
+def add_package_to_repo(package: Pkgbuild, arch: Arch):
     logging.info(f'Adding {package.path} to repo {package.repo}')
     pkgbuild_dir = os.path.join(config.get_path('pkgbuilds'), package.path)
 
@@ -317,7 +317,7 @@ def add_package_to_repo(package: Package, arch: Arch):
     return files
 
 
-def check_package_version_built(package: Package, arch: Arch) -> bool:
+def check_package_version_built(package: Pkgbuild, arch: Arch) -> bool:
     native_chroot = setup_build_chroot(config.runtime['arch'])
     config_path = '/' + native_chroot.write_makepkg_conf(
         target_arch=arch,
@@ -373,7 +373,7 @@ def setup_build_chroot(
     return chroot
 
 
-def setup_sources(package: Package, chroot: Chroot, makepkg_conf_path='/etc/makepkg.conf', pkgbuilds_dir: str = None):
+def setup_sources(package: Pkgbuild, chroot: Chroot, makepkg_conf_path='/etc/makepkg.conf', pkgbuilds_dir: str = None):
     pkgbuilds_dir = pkgbuilds_dir if pkgbuilds_dir else CHROOT_PATHS['pkgbuilds']
     makepkg_setup_args = [
         '--config',
@@ -391,7 +391,7 @@ def setup_sources(package: Package, chroot: Chroot, makepkg_conf_path='/etc/make
 
 
 def build_package(
-    package: Package,
+    package: Pkgbuild,
     arch: Arch,
     repo_dir: str = None,
     enable_crosscompile: bool = True,
@@ -465,13 +465,13 @@ def build_package(
         raise Exception(f'Failed to compile package {package.path}')
 
 
-def get_unbuilt_package_levels(repo: dict[str, Package], packages: list[Package], arch: Arch, force: bool = False) -> list[set[Package]]:
+def get_unbuilt_package_levels(repo: dict[str, Pkgbuild], packages: list[Pkgbuild], arch: Arch, force: bool = False) -> list[set[Pkgbuild]]:
     package_levels = generate_dependency_chain(repo, packages)
     build_names = set[str]()
-    build_levels = list[set[Package]]()
+    build_levels = list[set[Pkgbuild]]()
     i = 0
     for level_packages in package_levels:
-        level = set[Package]()
+        level = set[Pkgbuild]()
         for package in level_packages:
             if ((not check_package_version_built(package, arch)) or set.intersection(set(package.depends), set(build_names)) or
                 (force and package in packages)):
@@ -485,8 +485,8 @@ def get_unbuilt_package_levels(repo: dict[str, Package], packages: list[Package]
 
 
 def build_packages(
-    repo: dict[str, Package],
-    packages: list[Package],
+    repo: dict[str, Pkgbuild],
+    packages: list[Pkgbuild],
     arch: Arch,
     force: bool = False,
     enable_crosscompile: bool = True,
@@ -519,7 +519,7 @@ def build_packages(
 def build_packages_by_paths(
     paths: list[str],
     arch: Arch,
-    repo: dict[str, Package],
+    repo: dict[str, Pkgbuild],
     force=False,
     enable_crosscompile: bool = True,
     enable_crossdirect: bool = True,
@@ -544,7 +544,7 @@ def build_packages_by_paths(
     )
 
 
-def build_enable_qemu_binfmt(arch: Arch, repo: dict[str, Package] = None):
+def build_enable_qemu_binfmt(arch: Arch, repo: dict[str, Pkgbuild] = None):
     if arch not in ARCHES:
         raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
     enforce_wrap()
@@ -604,7 +604,7 @@ def build(paths: list[str], force: bool, arch: Arch):
         raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
     enforce_wrap()
     config.enforce_config_loaded()
-    repo: dict[str, Package] = discover_packages()
+    repo: dict[str, Pkgbuild] = discover_packages()
     if arch != config.runtime['arch']:
         build_enable_qemu_binfmt(arch, repo=repo)
 
@@ -689,7 +689,7 @@ def cmd_list():
     enforce_wrap()
     logging.info('Discovering packages.')
     packages = discover_packages()
-    logging.info('Done! Packages:')
+    logging.info('Done! Pkgbuilds:')
     for p in set(packages.values()):
         print(
             f'name: {p.name}; ver: {p.version}; provides: {p.provides}; replaces: {p.replaces}; local_depends: {p.local_depends}; depends: {p.depends}'
