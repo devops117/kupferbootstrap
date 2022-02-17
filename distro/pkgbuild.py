@@ -9,11 +9,10 @@ from .package import PackageInfo
 
 
 class Pkgbuild(PackageInfo):
-    depends: list[str] = None
-    provides: list[str] = None
-    replaces: list[str] = None
-    local_depends: list[PackageInfo] = None
-    subpackages: list[PackageInfo] = None
+    depends: list[str]
+    provides: list[str]
+    replaces: list[str]
+    local_depends: list[str]
     repo = ''
     mode = ''
     path = ''
@@ -26,20 +25,26 @@ class Pkgbuild(PackageInfo):
         depends: list[str] = [],
         provides: list[str] = [],
         replaces: list[str] = [],
-        subpackages: list[PackageInfo] = [],
     ) -> None:
-        self.version = None
+        self.version = ''
         self.path = relative_path
         self.depends = deepcopy(depends)
         self.provides = deepcopy(provides)
         self.replaces = deepcopy(replaces)
-        self.subpackages = deepcopy(subpackages)
 
     def __repr__(self):
         return f'Package({self.name},{repr(self.path)},{self.version},{self.mode})'
 
     def names(self):
         return list(set([self.name] + self.provides + self.replaces))
+
+
+class Pkgbase(Pkgbuild):
+    subpackages: list[Pkgbuild]
+
+    def __init__(self, relative_path: str, subpackages: list[Pkgbuild] = [], **args):
+        self.subpackages = deepcopy(subpackages)
+        super().__init__(relative_path, **args)
 
 
 def parse_pkgbuild(relative_pkg_dir: str, native_chroot: Chroot) -> list[Pkgbuild]:
@@ -53,7 +58,7 @@ def parse_pkgbuild(relative_pkg_dir: str, native_chroot: Chroot) -> list[Pkgbuil
         raise Exception((f'{relative_pkg_dir}/PKGBUILD has {"no" if mode is None else "an invalid"} mode configured') +
                         (f': "{mode}"' if mode is not None else ''))
 
-    base_package = Pkgbuild(relative_pkg_dir)
+    base_package = Pkgbase(relative_pkg_dir)
     base_package.mode = mode
     base_package.repo = relative_pkg_dir.split('/')[0]
     srcinfo = native_chroot.run_cmd(
