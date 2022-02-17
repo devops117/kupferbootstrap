@@ -116,9 +116,10 @@ def discover_packages(parallel: bool = True) -> dict[str, Package]:
 
     logging.debug('Building package dictionary!')
     for package in results:
-        if package.name in packages:
-            logging.warn(f'Overriding {packages[package.name]} with {package}')
-        packages[package.name] = package
+        for name in [package.name] + package.replaces:
+            if name in packages:
+                logging.warn(f'Overriding {packages[package.name]} with {package}')
+            packages[name] = package
 
     # This filters the deps to only include the ones that are provided in this repo
     for package in packages.values():
