@@ -572,12 +572,12 @@ def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
         if type == 'base':
             chroot = get_base_chroot(arch)
             if not os.path.exists(os.path.join(chroot.path, 'bin')):
-                chroot.init()
+                chroot.initialize()
             chroot.initialized = True
         elif type == 'build':
             chroot = get_build_chroot(arch, activate=True)
             if not os.path.exists(os.path.join(chroot.path, 'bin')):
-                chroot.init()
+                chroot.initialize()
             chroot.initialized = True
             chroot.mount_pkgbuilds()
             if config.file['build']['crossdirect'] and enable_crossdirect:
