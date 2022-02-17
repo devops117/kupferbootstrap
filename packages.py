@@ -684,6 +684,18 @@ def cmd_clean(what: list[str] = ['all'], force: bool = False, noop: bool = False
                 rmtree(dir)
 
 
+@cmd_packages.command(name='list')
+def cmd_list():
+    enforce_wrap()
+    logging.info('Discovering packages.')
+    packages = discover_packages()
+    logging.info('Done! Packages:')
+    for p in set(packages.values()):
+        print(
+            f'name: {p.name}; ver: {p.version}; provides: {p.provides}; replaces: {p.replaces}; local_depends: {p.local_depends}; depends: {p.depends}'
+        )
+
+
 @cmd_packages.command(name='check')
 @click.argument('paths', nargs=-1)
 def cmd_check(paths):
