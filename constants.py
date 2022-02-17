@@ -156,3 +156,10 @@ WRAPPER_TYPES = [
     'none',
     'docker',
 ]
+
+MAKEPKG_CMD = [
+    'makepkg',
+    '--noconfirm',
+    '--ignorearch',
+    '--needed',
+]

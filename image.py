@@ -12,7 +12,7 @@ from subprocess import run, CompletedProcess
 from chroot import Chroot, get_device_chroot
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config
-from distro import get_base_distro, get_kupfer_https, get_kupfer_local
+from distro.distro import get_base_distro, get_kupfer_https, get_kupfer_local
 from packages import build_enable_qemu_binfmt, discover_packages, build_packages
 from ssh import copy_ssh_keys
 from wrapper import enforce_wrap

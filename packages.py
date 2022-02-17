@@ -9,20 +9,14 @@ from joblib import Parallel, delayed
 from glob import glob
 from shutil import rmtree
 
-from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch, CHROOT_PATHS
+from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch, CHROOT_PATHS, MAKEPKG_CMD
 from config import config
 from chroot import get_build_chroot, Chroot
 from ssh import run_ssh_command, scp_put_files
 from wrapper import enforce_wrap
 from utils import git
 from binfmt import register as binfmt_register
-
-makepkg_cmd = [
-    'makepkg',
-    '--noconfirm',
-    '--ignorearch',
-    '--needed',
-]
+from distro.pkgbuild import Pkgbuild as Package, parse_pkgbuild
 
 pacman_cmd = [
     'pacman',
@@ -42,68 +36,6 @@ def get_makepkg_env():
         'MAKEFLAGS': f"-j{threads}",
         'QEMU_LD_PREFIX': '/usr/aarch64-unknown-linux-gnu',
     }
-
-
-class Package:
-    name = ''
-    names: list[str] = []
-    depends: list[str] = []
-    local_depends = None
-    repo = ''
-    mode = ''
-
-    def __init__(
-        self,
-        path: str,
-        native_chroot: Chroot,
-    ) -> None:
-        self.path = path
-        self._loadinfo(native_chroot)
-
-    def _loadinfo(self, native_chroot: Chroot):
-        result = native_chroot.run_cmd(
-            makepkg_cmd + ['--printsrcinfo'],
-            cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], self.path),
-            stdout=subprocess.PIPE,
-        )
-        lines = result.stdout.decode('utf-8').split('\n')
-        names = []
-        depends = []
-        multi_pkgs = False
-
-        for line_raw in lines:
-            line = line_raw.lstrip()
-            if line.startswith('pkgbase'):
-                self.name = line.split(' = ')[1]
-                names.append(self.name)
-                multi_pkgs = True
-            if line.startswith('pkgname'):
-                names.append(line.split(' = ')[1])
-                if not multi_pkgs:
-                    self.name = line.split(' = ')[1]
-            if line.startswith('pkgbase') or line.startswith('provides'):
-                names.append(line.split(' = ')[1])
-            if line.startswith('depends') or line.startswith('makedepends') or line.startswith('checkdepends') or line.startswith('optdepends'):
-                depends.append(line.split(' = ')[1].split('=')[0].split(': ')[0])
-        self.names = list(set(names))
-        self.depends = list(set(depends))
-
-        self.repo = self.path.split('/')[0]
-
-        mode = ''
-        logging.debug(config)
-        with open(os.path.join(native_chroot.get_path(CHROOT_PATHS['pkgbuilds']), self.path, 'PKGBUILD'), 'r') as file:
-            for line in file.read().split('\n'):
-                if line.startswith('_mode='):
-                    mode = line.split('=')[1]
-                    break
-        if mode not in ['host', 'cross']:
-            logging.fatal(f'Package {self.path} has an invalid mode configured: \'{mode}\'')
-            exit(1)
-        self.mode = mode
-
-    def __repr__(self):
-        return f'Package({self.name},{repr(self.names)},{repr(self.path)})'
 
 
 def clone_pkbuilds(pkgbuilds_dir: str, repo_url: str, branch: str, interactive=False, update=True):
@@ -162,7 +94,7 @@ def init_prebuilts(arch: Arch, dir: str = None):
                         exit(1)
 
 
-def discover_packages() -> dict[str, Package]:
+def discover_packages(parallel: bool = True) -> dict[str, Package]:
     pkgbuilds_dir = config.get_path('pkgbuilds')
     packages = {}
     paths = []
@@ -172,8 +104,20 @@ def discover_packages() -> dict[str, Package]:
             paths.append(os.path.join(repo, dir))
 
     native_chroot = setup_build_chroot(config.runtime['arch'], add_kupfer_repos=False)
-    results = Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(Package)(path, native_chroot) for path in paths)
+    results = []
+
+    if parallel:
+        chunks = (Parallel(n_jobs=multiprocessing.cpu_count() * 4)(delayed(parse_pkgbuild)(path, native_chroot) for path in paths))
+    else:
+        chunks = (parse_pkgbuild(path, native_chroot) for path in paths)
+
+    for pkglist in chunks:
+        results += pkglist
+
+    logging.debug('Building package dictionary!')
     for package in results:
+        if package.name in packages:
+            logging.warn(f'Overriding {packages[package.name]} with {package}')
         packages[package.name] = package
 
     # This filters the deps to only include the ones that are provided in this repo
@@ -184,7 +128,7 @@ def discover_packages() -> dict[str, Package]:
             for p in packages.values():
                 if found:
                     break
-                for name in p.names:
+                for name in p.names():
                     if dep == name:
                         logging.debug(f'Found {p.name} that provides {dep}')
                         found = True
@@ -221,7 +165,7 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
 
     def visit(package: Package, visited=visited, visited_names=visited_names):
         visited.add(package)
-        visited_names.update(package.names)
+        visited_names.update(package.names())
 
     def join_levels(levels: list[set[Package]]) -> dict[Package, int]:
         result = dict[Package, int]()
@@ -285,7 +229,7 @@ def generate_dependency_chain(package_repo: dict[str, Package], to_build: list[P
                 if type(other_pkg) != Package:
                     raise Exception('Not a Package object:' + repr(other_pkg))
                 for dep_name in other_pkg.depends:
-                    if dep_name in pkg.names:
+                    if dep_name in pkg.names():
                         dep_levels[level].remove(pkg)
                         dep_levels[level + 1].add(pkg)
                         logging.debug(f'Moving {pkg.name} to level {level+1} because {other_pkg.name} depends on it as {dep_name}')
@@ -380,7 +324,7 @@ def check_package_version_built(package: Package, arch: Arch) -> bool:
         cross=True,
     )
 
-    cmd = ['cd', os.path.join(CHROOT_PATHS['pkgbuilds'], package.path), '&&'] + makepkg_cmd + [
+    cmd = ['cd', os.path.join(CHROOT_PATHS['pkgbuilds'], package.path), '&&'] + MAKEPKG_CMD + [
         '--config',
         config_path,
         '--nobuild',
@@ -440,7 +384,7 @@ def setup_sources(package: Package, chroot: Chroot, makepkg_conf_path='/etc/make
     ]
 
     logging.info(f'Setting up sources for {package.path} in {chroot.name}')
-    result = chroot.run_cmd(makepkg_cmd + makepkg_setup_args, cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], package.path))
+    result = chroot.run_cmd(MAKEPKG_CMD + makepkg_setup_args, cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], package.path))
     if result.returncode != 0:
         raise Exception(f'Failed to check sources for {package.path}')
 
@@ -458,7 +402,7 @@ def build_package(
     makepkg_conf_path = 'etc/makepkg.conf'
     repo_dir = repo_dir if repo_dir else config.get_path('pkgbuilds')
     foreign_arch = config.runtime['arch'] != arch
-    deps = (list(set(package.depends) - set(package.names)))
+    deps = (list(set(package.depends) - set(package.names())))
     target_chroot = setup_build_chroot(
         arch=arch,
         extra_packages=deps,
@@ -531,7 +475,7 @@ def get_unbuilt_package_levels(repo: dict[str, Package], packages: list[Package]
             if ((not check_package_version_built(package, arch)) or set.intersection(set(package.depends), set(build_names)) or
                 (force and package in packages)):
                 level.add(package)
-                build_names.update(package.names)
+                build_names.update(package.names())
         if level:
             build_levels.append(level)
             logging.debug(f'Adding to level {i}:' + '\n' + ('\n'.join([p.name for p in level])))

@@ -5,14 +5,14 @@ import os
 import atexit
 from glob import glob
 from shutil import rmtree
+from shlex import quote as shell_quote
 
 from config import config
-from distro import get_base_distro, get_kupfer_local, RepoInfo
-from shlex import quote as shell_quote
-from utils import mount, umount, check_findmnt, log_or_exception
+from distro.distro import get_base_distro, get_kupfer_local, RepoInfo
 from wrapper import enforce_wrap
 from constants import Arch, GCC_HOSTSPECS, CROSSDIRECT_PKGS, BASE_PACKAGES, CHROOT_PATHS
 from generator import generate_makepkg_conf
+from utils import mount, umount, check_findmnt, log_or_exception
 
 BIND_BUILD_DIRS = 'BINDBUILDDIRS'
 BASE_CHROOT_PREFIX = 'base_'
