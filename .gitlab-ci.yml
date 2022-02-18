@@ -10,6 +10,17 @@ format:
   script:
     - ./format.sh --check
 
+typecheck:
+  stage: check
+  image: python
+  before_script:
+    - pip install mypy
+  script:
+    - ./typecheck.sh --non-interactive --junit-xml mypy-report.xml
+  artifacts:
+    reports:
+      junit: mypy-report.xml
+
 build_docker:
   stage: build
   image: docker:latest
