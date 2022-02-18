@@ -221,7 +221,6 @@ class Chroot(AbstractChroot):
         if outer_env is None:
             outer_env = os.environ.copy()
         env_cmd = ['/usr/bin/env'] + [f'{shell_quote(key)}={shell_quote(value)}' for key, value in inner_env.items()]
-        run_func = subprocess.call if attach_tty else subprocess.run
         kwargs: dict = {
             'env': outer_env,
         }

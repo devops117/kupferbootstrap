@@ -5,7 +5,8 @@ import os
 from config import config
 from wrapper import enforce_wrap
 
-from .base import get_base_chroot, Chroot, BaseChroot
+from .abstract import Chroot
+from .base import get_base_chroot
 from .build import get_build_chroot, BuildChroot
 #from .device import get_device_chroot, DeviceChroot
 from .helpers import get_chroot_path

@@ -1,5 +1,5 @@
 import os
-from typing import Union, Optional, TypedDict
+from typing import Optional, TypedDict
 
 from config import config
 from constants import Arch
