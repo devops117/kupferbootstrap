@@ -2,7 +2,7 @@ import atexit
 import logging
 import os
 import subprocess
-from typing import Protocol
+from typing import Protocol, Union
 from shlex import quote as shell_quote
 
 from config import config
@@ -195,7 +195,7 @@ class Chroot(AbstractChroot):
         self.active = False
 
     def run_cmd(self,
-                script: str,
+                script: Union[str, list[str]],
                 inner_env: dict[str, str] = {},
                 outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
                 attach_tty: bool = False,

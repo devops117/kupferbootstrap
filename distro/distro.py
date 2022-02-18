@@ -1,3 +1,5 @@
+from typing import Optional
+
 from constants import ARCHES, BASE_DISTROS, REPOSITORIES, KUPFER_HTTPS, CHROOT_PATHS
 from generator import generate_pacman_conf_body
 from config import config
@@ -57,8 +59,7 @@ def get_kupfer_https(arch: str) -> Distro:
     return get_kupfer(arch, KUPFER_HTTPS)
 
 
-def get_kupfer_local(arch: str = None, in_chroot: bool = True) -> Distro:
-    if not arch:
-        arch = config.runtime['arch']
+def get_kupfer_local(arch: Optional[str] = None, in_chroot: bool = True) -> Distro:
+    arch = arch or config.runtime['arch']
     dir = CHROOT_PATHS['packages'] if in_chroot else config.get_path('packages')
     return get_kupfer(arch, f"file://{dir}/$arch/$repo")

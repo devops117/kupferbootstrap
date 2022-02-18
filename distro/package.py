@@ -1,8 +1,11 @@
+from typing import Optional
+
+
 class PackageInfo:
     name: str
     version: str
     filename: str
-    resolved_url: str
+    resolved_url: Optional[str]
 
     def __init__(
         self,
@@ -19,6 +22,7 @@ class PackageInfo:
     def __repr__(self):
         return f'{self.name}@{self.version}'
 
+    @staticmethod
     def parse_desc(desc_str: str, resolved_url=None):
         """Parses a desc file, returning a PackageInfo"""
 
