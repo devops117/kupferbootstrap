@@ -5,9 +5,10 @@ import os
 from config import config
 from wrapper import enforce_wrap
 
-from .base import get_base_chroot, Chroot
-from .build import get_build_chroot
-from .device import get_device_chroot
+from .base import get_base_chroot, Chroot, BaseChroot
+from .build import get_build_chroot, BuildChroot
+#from .device import get_device_chroot, DeviceChroot
+from .helpers import get_chroot_path
 
 # export Chroot class
 Chroot = Chroot
@@ -23,32 +24,34 @@ def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
         raise Exception('Unknown chroot type: ' + type)
 
     enforce_wrap()
+    chroot: Chroot
     if type == 'rootfs':
         if arch:
             name = 'rootfs_' + arch
         else:
             raise Exception('"rootfs" without args not yet implemented, sorry!')
             # TODO: name = config.get_profile()[...]
-        chroot_path = os.path.join(config.get_path('chroots'), name)
+        chroot_path = get_chroot_path(name)
         if not os.path.exists(chroot_path):
             raise Exception(f"rootfs {name} doesn't exist")
     else:
         if not arch:
-            #TODO: arch = config.get_profile()[...]
+            # TODO: arch = config.get_profile()[...]
             arch = 'aarch64'
         if type == 'base':
             chroot = get_base_chroot(arch)
-            if not os.path.exists(os.path.join(chroot.path, 'bin')):
+            if not os.path.exists(chroot.get_path('/bin')):
                 chroot.initialize()
             chroot.initialized = True
         elif type == 'build':
-            chroot = get_build_chroot(arch, activate=True)
-            if not os.path.exists(os.path.join(chroot.path, 'bin')):
-                chroot.initialize()
-            chroot.initialized = True
-            chroot.mount_pkgbuilds()
+            build_chroot: BuildChroot = get_build_chroot(arch, activate=True)
+            chroot = build_chroot  # type safety
+            if not os.path.exists(build_chroot.get_path('/bin')):
+                build_chroot.initialize()
+            build_chroot.initialized = True
+            build_chroot.mount_pkgbuilds()
             if config.file['build']['crossdirect'] and enable_crossdirect:
-                chroot.mount_crossdirect()
+                build_chroot.mount_crossdirect()
         else:
             raise Exception('Really weird bug')
 

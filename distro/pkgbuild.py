@@ -66,6 +66,7 @@ def parse_pkgbuild(relative_pkg_dir: str, native_chroot: Chroot) -> list[Pkgbuil
         cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], base_package.path),
         stdout=subprocess.PIPE,
     )
+    assert (isinstance(srcinfo, subprocess.CompletedProcess))
     lines = srcinfo.stdout.decode('utf-8').split('\n')
 
     current = base_package

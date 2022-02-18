@@ -6,7 +6,7 @@ from utils import check_findmnt
 
 from .base import BaseChroot
 from .build import BuildChroot
-from .abstract import get_chroot, Chroot
+from .abstract import get_chroot
 
 
 class DeviceChroot(BuildChroot):
@@ -39,7 +39,16 @@ class DeviceChroot(BuildChroot):
         self.mount(source_path, '/', fs_type=fs_type, options=options)
 
 
-def get_device_chroot(device: str, flavour: str, arch: Arch, packages: list[str] = BASE_PACKAGES, extra_repos={}, **kwargs) -> Chroot:
+def get_device_chroot(
+    device: str,
+    flavour: str,
+    arch: Arch,
+    packages: list[str] = BASE_PACKAGES,
+    extra_repos={},
+    **kwargs,
+) -> DeviceChroot:
     name = f'rootfs_{device}-{flavour}'
     default = DeviceChroot(name, arch, initialize=False, copy_base=False, base_packages=packages, extra_repos=extra_repos)
-    return get_chroot(name, **kwargs, default=default)
+    chroot = get_chroot(name, **kwargs, default=default)
+    assert (isinstance(chroot, DeviceChroot))
+    return chroot

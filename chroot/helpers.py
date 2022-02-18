@@ -1,4 +1,5 @@
 import os
+from typing import Union, Optional, TypedDict
 
 from config import config
 from constants import Arch
@@ -7,9 +8,16 @@ BIND_BUILD_DIRS = 'BINDBUILDDIRS'
 BASE_CHROOT_PREFIX = 'base_'
 BUILD_CHROOT_PREFIX = 'build_'
 
+
+class MountEntry(TypedDict):
+    src: str
+    type: Optional[str]
+    options: list[str]
+
+
 # inspired by arch-chroot
 # order of these matters!
-BASIC_MOUNTS = {
+BASIC_MOUNTS: dict[str, MountEntry] = {
     '/proc': {
         'src': 'proc',
         'type': 'proc',

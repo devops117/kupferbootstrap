@@ -1,4 +1,4 @@
-from typing import TypeAlias
+from typing import TypeAlias, TypedDict
 
 FASTBOOT = 'fastboot'
 FLASH_PARTS = {
@@ -14,28 +14,35 @@ LOCATIONS = [EMMC, MICROSD]
 JUMPDRIVE = 'jumpdrive'
 JUMPDRIVE_VERSION = '0.8'
 
-BOOT_STRATEGIES = {
+BOOT_STRATEGIES: dict[str, str] = {
     'oneplus-enchilada': FASTBOOT,
     'xiaomi-beryllium-ebbg': FASTBOOT,
     'xiaomi-beryllium-tianma': FASTBOOT,
     'bq-paella': FASTBOOT,
 }
 
-DEVICES = {
+DEVICES: dict[str, list[str]] = {
     'oneplus-enchilada': ['device-sdm845-oneplus-enchilada'],
     'xiaomi-beryllium-ebbg': ['device-sdm845-xiaomi-beryllium-ebbg'],
     'xiaomi-beryllium-tianma': ['device-sdm845-xiaomi-beryllium-tianma'],
     'bq-paella': ['device-msm8916-bq-paella'],
 }
 
-BASE_PACKAGES = [
+BASE_PACKAGES: list[str] = [
     'base',
     'base-kupfer',
     'nano',
     'vim',
 ]
 
-FLAVOURS = {
+
+class Flavour(TypedDict, total=False):
+    packages: list[str]
+    post_cmds: list[str]
+    size: int
+
+
+FLAVOURS: dict[str, Flavour] = {
     'barebone': {
         'packages': [],
     },

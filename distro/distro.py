@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Mapping
 
 from constants import ARCHES, BASE_DISTROS, REPOSITORIES, KUPFER_HTTPS, CHROOT_PATHS
 from generator import generate_pacman_conf_body
@@ -9,7 +9,7 @@ from .repo import RepoInfo, Repo
 
 
 class Distro:
-    repos: dict[str, Repo]
+    repos: Mapping[str, Repo]
     arch: str
 
     def __init__(self, arch: str, repo_infos: dict[str, RepoInfo], scan=False):
@@ -33,11 +33,11 @@ class Distro:
             for package in repo.packages:
                 results[package.name] = package
 
-    def repos_config_snippet(self, extra_repos: dict[str, RepoInfo] = {}) -> str:
+    def repos_config_snippet(self, extra_repos: Mapping[str, RepoInfo] = {}) -> str:
         extras = [Repo(name, url_template=info.url_template, arch=self.arch, options=info.options, scan=False) for name, info in extra_repos.items()]
         return '\n\n'.join(repo.config_snippet() for repo in (list(self.repos.values()) + extras))
 
-    def get_pacman_conf(self, extra_repos: dict[str, RepoInfo] = {}, check_space: bool = True):
+    def get_pacman_conf(self, extra_repos: Mapping[str, RepoInfo] = {}, check_space: bool = True):
         body = generate_pacman_conf_body(self.arch, check_space=check_space)
         return body + self.repos_config_snippet(extra_repos)
 

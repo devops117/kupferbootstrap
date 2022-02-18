@@ -5,13 +5,13 @@ import re
 import subprocess
 import click
 import logging
-
 from signal import pause
 from subprocess import run, CompletedProcess
+from typing import Optional
 
-from chroot import Chroot, get_device_chroot
+from chroot.device import DeviceChroot, get_device_chroot
 from constants import BASE_PACKAGES, DEVICES, FLAVOURS
-from config import config
+from config import config, Profile
 from distro.distro import get_base_distro, get_kupfer_https, get_kupfer_local
 from packages import build_enable_qemu_binfmt, discover_packages, build_packages
 from ssh import copy_ssh_keys
@@ -58,7 +58,7 @@ def shrink_fs(loop_device: str, file: str, sector_size: int):
         raise Exception(f'Failed to resize2fs {loop_device}p2')
 
     logging.debug(f'Finding end block of shrunken filesystem on {loop_device}p2')
-    blocks = int(re.search('is now [0-9]+', result.stdout.decode('utf-8')).group(0).split(' ')[2])
+    blocks = int(re.search('is now [0-9]+', result.stdout.decode('utf-8')).group(0).split(' ')[2])  # type: ignore
     sectors = blocks * sectors_blocks_factor  #+ 157812 - 25600
 
     logging.debug(f'Shrinking partition at {loop_device}p2 to {sectors} sectors')
@@ -66,7 +66,7 @@ def shrink_fs(loop_device: str, file: str, sector_size: int):
         ['fdisk', '-b', str(sector_size), loop_device],
         stdin=subprocess.PIPE,
     )
-    child_proccess.stdin.write('\n'.join([
+    child_proccess.stdin.write('\n'.join([  # type: ignore
         'd',
         '2',
         'n',
@@ -114,9 +114,9 @@ def shrink_fs(loop_device: str, file: str, sector_size: int):
     partprobe(loop_device)
 
 
-def get_device_and_flavour(profile: str = None) -> tuple[str, str]:
+def get_device_and_flavour(profile_name: Optional[str] = None) -> tuple[str, str]:
     config.enforce_config_loaded()
-    profile = config.get_profile(profile)
+    profile = config.get_profile(profile_name)
     if not profile['device']:
         raise Exception("Please set the device using 'kupferbootstrap config init ...'")
 
@@ -184,7 +184,7 @@ def losetup_rootfs_image(image_path: str, sector_size: int) -> str:
     return loop_device
 
 
-def mount_chroot(rootfs_source: str, boot_src: str, chroot: Chroot):
+def mount_chroot(rootfs_source: str, boot_src: str, chroot: DeviceChroot):
     logging.debug(f'Mounting {rootfs_source} at {chroot.path}')
 
     chroot.mount_rootfs(rootfs_source)
@@ -318,6 +318,7 @@ def install_rootfs(rootfs_device: str, bootfs_device: str, device, flavour, arch
         file.write(get_base_distro(arch).get_pacman_conf(check_space=True, extra_repos=get_kupfer_https(arch).repos))
     if post_cmds:
         result = chroot.run_cmd(' && '.join(post_cmds))
+        assert isinstance(result, subprocess.CompletedProcess)
         if result.returncode != 0:
             raise Exception('Error running post_cmds')
 
@@ -344,9 +345,9 @@ def cmd_image():
 def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: str = None, skip_part_images: bool = False):
     """Build a device image"""
     enforce_wrap()
-    profile = config.get_profile(profile_name)
+    profile: Profile = config.get_profile(profile_name)
     device, flavour = get_device_and_flavour(profile_name)
-    size_extra_mb = profile["size_extra_mb"]
+    size_extra_mb: int = int(profile["size_extra_mb"])
 
     # TODO: PARSE DEVICE ARCH AND SECTOR SIZE
     arch = 'aarch64'
@@ -378,7 +379,8 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
     partition_device(loop_device)
     partprobe(loop_device)
 
-    boot_dev, root_dev = None, None
+    boot_dev: str
+    root_dev: str
     loop_boot = loop_device + 'p1'
     loop_root = loop_device + 'p2'
     if skip_part_images:

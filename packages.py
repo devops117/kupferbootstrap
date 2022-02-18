@@ -8,10 +8,11 @@ from copy import deepcopy
 from joblib import Parallel, delayed
 from glob import glob
 from shutil import rmtree
+from typing import Iterable, Iterator, Any, Optional
 
 from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch, CHROOT_PATHS, MAKEPKG_CMD
 from config import config
-from chroot import get_build_chroot, Chroot
+from chroot.build import get_build_chroot, BuildChroot
 from ssh import run_ssh_command, scp_put_files
 from wrapper import enforce_wrap
 from utils import git
@@ -96,7 +97,7 @@ def init_prebuilts(arch: Arch, dir: str = None):
 
 def discover_packages(parallel: bool = True) -> dict[str, Pkgbuild]:
     pkgbuilds_dir = config.get_path('pkgbuilds')
-    packages = {}
+    packages: dict[str, Pkgbuild] = {}
     paths = []
     init_pkgbuilds(interactive=False)
     for repo in REPOSITORIES:
@@ -141,9 +142,9 @@ def discover_packages(parallel: bool = True) -> dict[str, Pkgbuild]:
     return packages
 
 
-def filter_packages_by_paths(repo: dict[str, Pkgbuild], paths: list[str], allow_empty_results=True) -> list[Pkgbuild]:
+def filter_packages_by_paths(repo: dict[str, Pkgbuild], paths: Iterable[str], allow_empty_results=True) -> Iterable[Pkgbuild]:
     if 'all' in paths:
-        return repo.values()
+        return list(repo.values())
     result = []
     for pkg in repo.values():
         if pkg.path in paths:
@@ -154,7 +155,7 @@ def filter_packages_by_paths(repo: dict[str, Pkgbuild], paths: list[str], allow_
     return result
 
 
-def generate_dependency_chain(package_repo: dict[str, Pkgbuild], to_build: list[Pkgbuild]) -> list[set[Pkgbuild]]:
+def generate_dependency_chain(package_repo: dict[str, Pkgbuild], to_build: Iterable[Pkgbuild]) -> list[set[Pkgbuild]]:
     """
     This figures out all dependencies and their sub-dependencies for the selection and adds those packages to the selection.
     First the top-level packages get selected by searching the paths.
@@ -171,9 +172,11 @@ def generate_dependency_chain(package_repo: dict[str, Pkgbuild], to_build: list[
     def join_levels(levels: list[set[Pkgbuild]]) -> dict[Pkgbuild, int]:
         result = dict[Pkgbuild, int]()
         for i, level in enumerate(levels):
-            result[level] = i
+            for pkg in level:
+                result[pkg] = i
+        return result
 
-    def get_dependencies(package: Pkgbuild, package_repo: dict[str, Pkgbuild] = package_repo) -> list[Pkgbuild]:
+    def get_dependencies(package: Pkgbuild, package_repo: dict[str, Pkgbuild] = package_repo) -> Iterator[Pkgbuild]:
         for dep_name in package.depends:
             if dep_name in visited_names:
                 continue
@@ -182,7 +185,7 @@ def generate_dependency_chain(package_repo: dict[str, Pkgbuild], to_build: list[
                 visit(dep_pkg)
                 yield dep_pkg
 
-    def get_recursive_dependencies(package: Pkgbuild, package_repo: dict[str, Pkgbuild] = package_repo) -> list[Pkgbuild]:
+    def get_recursive_dependencies(package: Pkgbuild, package_repo: dict[str, Pkgbuild] = package_repo) -> Iterator[Pkgbuild]:
         for pkg in get_dependencies(package, package_repo):
             yield pkg
             for sub_pkg in get_recursive_dependencies(pkg, package_repo):
@@ -208,7 +211,7 @@ def generate_dependency_chain(package_repo: dict[str, Pkgbuild], to_build: list[
     level = 0
     # protect against dependency cycles
     repeat_count = 0
-    _last_level: set[Pkgbuild] = None
+    _last_level: Optional[set[Pkgbuild]] = None
     while dep_levels[level]:
         level_copy = dep_levels[level].copy()
         modified = False
@@ -333,7 +336,7 @@ def check_package_version_built(package: Pkgbuild, arch: Arch) -> bool:
         '--skippgpcheck',
         '--packagelist',
     ]
-    result = native_chroot.run_cmd(
+    result: Any = native_chroot.run_cmd(
         cmd,
         capture_output=True,
     )
@@ -358,7 +361,7 @@ def setup_build_chroot(
     extra_packages: list[str] = [],
     add_kupfer_repos: bool = True,
     clean_chroot: bool = False,
-) -> Chroot:
+) -> BuildChroot:
     init_prebuilts(arch)
     chroot = get_build_chroot(arch, add_kupfer_repos=add_kupfer_repos)
     chroot.mount_packages()
@@ -373,7 +376,7 @@ def setup_build_chroot(
     return chroot
 
 
-def setup_sources(package: Pkgbuild, chroot: Chroot, makepkg_conf_path='/etc/makepkg.conf', pkgbuilds_dir: str = None):
+def setup_sources(package: Pkgbuild, chroot: BuildChroot, makepkg_conf_path='/etc/makepkg.conf', pkgbuilds_dir: str = None):
     pkgbuilds_dir = pkgbuilds_dir if pkgbuilds_dir else CHROOT_PATHS['pkgbuilds']
     makepkg_setup_args = [
         '--config',
@@ -386,6 +389,7 @@ def setup_sources(package: Pkgbuild, chroot: Chroot, makepkg_conf_path='/etc/mak
 
     logging.info(f'Setting up sources for {package.path} in {chroot.name}')
     result = chroot.run_cmd(MAKEPKG_CMD + makepkg_setup_args, cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], package.path))
+    assert isinstance(result, subprocess.CompletedProcess)
     if result.returncode != 0:
         raise Exception(f'Failed to check sources for {package.path}')
 
@@ -428,7 +432,9 @@ def build_package(
         logging.info('Setting up dependencies for cross-compilation')
         # include crossdirect for ccache symlinks and qemu-user
         results = native_chroot.try_install_packages(package.depends + CROSSDIRECT_PKGS + [f"{GCC_HOSTSPECS[native_chroot.arch][arch]}-gcc"])
-        if results['crossdirect'].returncode != 0:
+        res_crossdirect = results['crossdirect']
+        assert isinstance(res_crossdirect, subprocess.CompletedProcess)
+        if res_crossdirect.returncode != 0:
             raise Exception('Unable to install crossdirect')
         # mount foreign arch chroot inside native chroot
         chroot_relative = os.path.join(CHROOT_PATHS['chroots'], target_chroot.name)
@@ -450,7 +456,7 @@ def build_package(
                 deps += ['ccache']
             logging.debug(('Building for native arch. ' if not foreign_arch else '') + 'Skipping crossdirect.')
         dep_install = target_chroot.try_install_packages(deps, allow_fail=False)
-        failed_deps = [name for name, res in dep_install.items() if res.returncode != 0]
+        failed_deps = [name for name, res in dep_install.items() if res.returncode != 0]  # type: ignore[union-attr]
         if failed_deps:
             raise Exception(f'Dependencies failed to install: {failed_deps}')
 
@@ -460,12 +466,12 @@ def build_package(
     build_cmd = f'makepkg --config {makepkg_conf_absolute} --skippgpcheck --needed --noconfirm --ignorearch {" ".join(makepkg_compile_opts)}'
     logging.debug(f'Building: Running {build_cmd}')
     result = build_root.run_cmd(build_cmd, inner_env=env, cwd=os.path.join(CHROOT_PATHS['pkgbuilds'], package.path))
-
+    assert isinstance(result, subprocess.CompletedProcess)
     if result.returncode != 0:
         raise Exception(f'Failed to compile package {package.path}')
 
 
-def get_unbuilt_package_levels(repo: dict[str, Pkgbuild], packages: list[Pkgbuild], arch: Arch, force: bool = False) -> list[set[Pkgbuild]]:
+def get_unbuilt_package_levels(repo: dict[str, Pkgbuild], packages: Iterable[Pkgbuild], arch: Arch, force: bool = False) -> list[set[Pkgbuild]]:
     package_levels = generate_dependency_chain(repo, packages)
     build_names = set[str]()
     build_levels = list[set[Pkgbuild]]()
@@ -486,7 +492,7 @@ def get_unbuilt_package_levels(repo: dict[str, Pkgbuild], packages: list[Pkgbuil
 
 def build_packages(
     repo: dict[str, Pkgbuild],
-    packages: list[Pkgbuild],
+    packages: Iterable[Pkgbuild],
     arch: Arch,
     force: bool = False,
     enable_crosscompile: bool = True,
@@ -517,7 +523,7 @@ def build_packages(
 
 
 def build_packages_by_paths(
-    paths: list[str],
+    paths: Iterable[str],
     arch: Arch,
     repo: dict[str, Pkgbuild],
     force=False,
@@ -595,10 +601,9 @@ def cmd_build(paths: list[str], force=False, arch=None):
     build(paths, force, arch)
 
 
-def build(paths: list[str], force: bool, arch: Arch):
-    if arch is None:
-        # TODO: arch = config.get_profile()...
-        arch = 'aarch64'
+def build(paths: Iterable[str], force: bool, arch: Optional[Arch]):
+    # TODO: arch = config.get_profile()...
+    arch = arch or 'aarch64'
 
     if arch not in ARCHES:
         raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
@@ -622,7 +627,7 @@ def build(paths: list[str], force: bool, arch: Arch):
 
 @cmd_packages.command(name='sideload')
 @click.argument('paths', nargs=-1)
-def cmd_sideload(paths: list[str]):
+def cmd_sideload(paths: Iterable[str]):
     """Build packages, copy to the device via SSH and install them"""
     files = build(paths, True, None)
     scp_put_files(files, '/tmp')
@@ -641,7 +646,7 @@ def cmd_sideload(paths: list[str]):
 @click.option('-f', '--force', is_flag=True, default=False, help="Don't prompt for confirmation")
 @click.option('-n', '--noop', is_flag=True, default=False, help="Print what would be removed but dont execute")
 @click.argument('what', type=click.Choice(['all', 'src', 'pkg']), nargs=-1)
-def cmd_clean(what: list[str] = ['all'], force: bool = False, noop: bool = False):
+def cmd_clean(what: Iterable[str] = ['all'], force: bool = False, noop: bool = False):
     """Remove files and directories not tracked in PKGBUILDs.git"""
     enforce_wrap()
     if noop:

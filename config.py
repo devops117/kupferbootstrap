@@ -1,16 +1,28 @@
 import appdirs
+import click
 import os
 import toml
 import logging
 from copy import deepcopy
-import click
+from typing import Optional, Union, TypedDict, Any, Mapping
 
 CONFIG_DIR = appdirs.user_config_dir('kupfer')
 CACHE_DIR = appdirs.user_cache_dir('kupfer')
 
 CONFIG_DEFAULT_PATH = os.path.join(CONFIG_DIR, 'kupferbootstrap.toml')
 
-Profile = dict[str, str]
+
+class Profile(TypedDict, total=False):
+    parent: str
+    device: str
+    flavour: str
+    pkgs_include: list[str]
+    pkgs_exclude: list[str]
+    hostname: str
+    username: str
+    password: Optional[str]
+    size_extra_mb: Union[str, int]
+
 
 PROFILE_DEFAULTS: Profile = {
     'parent': '',
@@ -24,9 +36,9 @@ PROFILE_DEFAULTS: Profile = {
     'size_extra_mb': "0",
 }
 
-PROFILE_EMPTY: Profile = {key: None for key in PROFILE_DEFAULTS.keys()}
+PROFILE_EMPTY: Profile = {key: None for key in PROFILE_DEFAULTS.keys()}  # type: ignore
 
-CONFIG_DEFAULTS = {
+CONFIG_DEFAULTS: dict = {
     'wrapper': {
         'type': 'docker',
     },
@@ -132,9 +144,9 @@ def resolve_profile(
     # now init missing keys
     for key, value in PROFILE_DEFAULTS.items():
         if key not in full.keys():
-            full[key] = None
+            full[key] = None  # type: ignore[misc]
             if type(value) == list:
-                full[key] = []
+                full[key] = []  # type: ignore[misc]
 
     full['size_extra_mb'] = int(full['size_extra_mb'] or 0)
 
@@ -147,7 +159,7 @@ def sanitize_config(conf: dict[str, dict], warn_missing_defaultprofile=True) -> 
     return merge_configs(conf_new=conf, conf_base={}, warn_missing_defaultprofile=warn_missing_defaultprofile)
 
 
-def merge_configs(conf_new: dict[str, dict], conf_base={}, warn_missing_defaultprofile=True) -> dict[str, dict]:
+def merge_configs(conf_new: Mapping[str, dict], conf_base={}, warn_missing_defaultprofile=True) -> dict[str, dict]:
     """
     Returns `conf_new` semantically merged into `conf_base`, after validating
     `conf_new` keys against `CONFIG_DEFAULTS` and `PROFILE_DEFAULTS`.
@@ -240,9 +252,8 @@ class ConfigLoadException(Exception):
     inner = None
 
     def __init__(self, extra_msg='', inner_exception: Exception = None):
-        msg = ['Config load failed!']
+        msg: list[str] = ['Config load failed!']
         if extra_msg:
-            msg[0].append(':')
             msg.append(extra_msg)
         if inner_exception:
             self.inner = inner_exception
@@ -263,9 +274,9 @@ class ConfigStateHolder:
     file: dict = {}
     # runtime config not persisted anywhere
     runtime: dict = CONFIG_RUNTIME_DEFAULTS
-    _profile_cache: dict[str, Profile] = None
+    _profile_cache: dict[str, Profile]
 
-    def __init__(self, runtime_conf={}, file_conf_path: str = None, file_conf_base: dict = {}):
+    def __init__(self, runtime_conf={}, file_conf_path: Optional[str] = None, file_conf_base: dict = {}):
         """init a stateholder, optionally loading `file_conf_path`"""
         self.runtime.update(runtime_conf)
         self.runtime['arch'] = os.uname().machine
@@ -274,11 +285,11 @@ class ConfigStateHolder:
             self.try_load_file(file_conf_path)
 
     def try_load_file(self, config_file=None, base=CONFIG_DEFAULTS):
-        _conf_file = config_file if config_file is not None else CONFIG_DEFAULT_PATH
-        self.runtime['config_file'] = _conf_file
+        config_file = config_file or CONFIG_DEFAULT_PATH
+        self.runtime['config_file'] = config_file
         self._profile_cache = None
         try:
-            self.file = parse_file(config_file=_conf_file, base=base)
+            self.file = parse_file(config_file=config_file, base=base)
         except Exception as ex:
             self.file_state.exception = ex
         self.file_state.load_finished = True
@@ -295,9 +306,8 @@ class ConfigStateHolder:
                 ex = Exception("File doesn't exist. Try running `kupferbootstrap config init` first?")
             raise ex
 
-    def get_profile(self, name: str = None) -> Profile:
-        if not name:
-            name = self.file['profiles']['current']
+    def get_profile(self, name: Optional[str] = None) -> Profile:
+        name = name or self.file['profiles']['current']
         self._profile_cache = resolve_profile(name=name, sparse_profiles=self.file['profiles'], resolved=self._profile_cache)
         return self._profile_cache[name]
 
@@ -310,7 +320,7 @@ class ConfigStateHolder:
 
     def dump(self) -> str:
         """dump toml representation of `self.file`"""
-        dump_toml(self.file)
+        return dump_toml(self.file)
 
     def write(self, path=None):
         """write toml representation of `self.file` to `path`"""
@@ -333,7 +343,7 @@ class ConfigStateHolder:
             self.invalidate_profile_cache()
         return changed
 
-    def update_profile(self, name: str, profile: dict, merge: bool = False, create: bool = True, prune: bool = True):
+    def update_profile(self, name: str, profile: Profile, merge: bool = False, create: bool = True, prune: bool = True):
         new = {}
         if name not in self.file['profiles']:
             if not create:
@@ -366,11 +376,11 @@ def comma_str_to_list(s: str, default=None) -> list[str]:
 
 def prompt_config(
     text: str,
-    default: any,
+    default: Any,
     field_type: type = str,
     bold: bool = True,
     echo_changes: bool = True,
-) -> (any, bool):
+) -> tuple[Any, bool]:
     """
     prompts for a new value for a config key. returns the result and a boolean that indicates
     whether the result is different, considering empty strings and None equal to each other.
@@ -404,10 +414,10 @@ def prompt_config(
     return result, changed
 
 
-def prompt_profile(name: str, create: bool = True, defaults: Profile = {}) -> (Profile, bool):
+def prompt_profile(name: str, create: bool = True, defaults: Profile = {}) -> tuple[Profile, bool]:
     """Prompts the user for every field in `defaults`. Set values to None for an empty profile."""
 
-    profile = PROFILE_EMPTY | defaults
+    profile: Any = PROFILE_EMPTY | defaults
     # don't use get_profile() here because we need the sparse profile
     if name in config.file['profiles']:
         profile |= config.file['profiles'][name]
@@ -420,14 +430,14 @@ def prompt_profile(name: str, create: bool = True, defaults: Profile = {}) -> (P
     for key, current in profile.items():
         current = profile[key]
         text = f'{name}.{key}'
-        result, _changed = prompt_config(text=text, default=current, field_type=type(PROFILE_DEFAULTS[key]))
+        result, _changed = prompt_config(text=text, default=current, field_type=type(PROFILE_DEFAULTS[key]))  # type: ignore
         if _changed:
             profile[key] = result
             changed = True
     return profile, changed
 
 
-def config_dot_name_get(name: str, config: dict[str, any], prefix: str = ''):
+def config_dot_name_get(name: str, config: dict[str, Any], prefix: str = '') -> Any:
     if not isinstance(config, dict):
         raise Exception(f"Couldn't resolve config name: passed config is not a dict: {repr(config)}")
     split_name = name.split('.')
@@ -442,7 +452,7 @@ def config_dot_name_get(name: str, config: dict[str, any], prefix: str = ''):
         return config_dot_name_get(name=rest_name, config=value, prefix=prefix + name + '.')
 
 
-def config_dot_name_set(name: str, value: any, config: dict[str, any]):
+def config_dot_name_set(name: str, value: Any, config: dict[str, Any]):
     split_name = name.split('.')
     if len(split_name) > 1:
         config = config_dot_name_get('.'.join(split_name[:-1]), config)
@@ -482,7 +492,7 @@ noop_flag = click.option('--noop', '-n', help="Don't write changes to file", is_
 def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool = False, noop: bool = False):
     """Initialize the config file"""
     if not non_interactive:
-        results = {}
+        results: dict[str, dict] = {}
         for section in sections:
             if section not in CONFIG_SECTIONS:
                 raise Exception(f'Unknown section: {section}')
@@ -526,7 +536,8 @@ def cmd_config_set(key_vals: list[str], non_interactive: bool = False, noop: boo
     for pair in key_vals:
         split_pair = pair.split('=')
         if len(split_pair) == 2:
-            key, value = split_pair
+            key: str = split_pair[0]
+            value: Any = split_pair[1]
             value_type = type(config_dot_name_get(key, CONFIG_DEFAULTS))
             if value_type != list:
                 value = click.types.convert_type(value_type)(value)

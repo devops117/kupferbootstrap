@@ -1,13 +1,11 @@
-from shutil import which
 import atexit
-import subprocess
-
 import logging
+import subprocess
+from shutil import which
+from typing import Optional, Union, Sequence
 
-from os import PathLike
 
-
-def programs_available(programs) -> bool:
+def programs_available(programs: Union[str, Sequence[str]]) -> bool:
     if type(programs) is str:
         programs = [programs]
     for program in programs:
@@ -16,7 +14,7 @@ def programs_available(programs) -> bool:
     return True
 
 
-def umount(dest: PathLike, lazy=False):
+def umount(dest: str, lazy=False):
     return subprocess.run(
         [
             'umount',
@@ -27,7 +25,7 @@ def umount(dest: PathLike, lazy=False):
     )
 
 
-def mount(src: PathLike, dest: PathLike, options=['bind'], fs_type=None, register_unmount=True) -> subprocess.CompletedProcess:
+def mount(src: str, dest: str, options: list[str] = ['bind'], fs_type: Optional[str] = None, register_unmount=True) -> subprocess.CompletedProcess:
     opts = []
     for opt in options:
         opts += ['-o', opt]
@@ -47,7 +45,7 @@ def mount(src: PathLike, dest: PathLike, options=['bind'], fs_type=None, registe
     return result
 
 
-def check_findmnt(path: PathLike):
+def check_findmnt(path: str):
     result = subprocess.run(
         [
             'findmnt',

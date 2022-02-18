@@ -2,8 +2,9 @@ import atexit
 import logging
 import os
 import subprocess
-from typing import Protocol, Union
+from copy import deepcopy
 from shlex import quote as shell_quote
+from typing import Protocol, Union, Optional, Mapping
 
 from config import config
 from constants import Arch, CHROOT_PATHS
@@ -22,17 +23,17 @@ class AbstractChroot(Protocol):
     initialized: bool = False
     active: bool = False
     active_mounts: list[str] = []
-    extra_repos: dict[str, RepoInfo] = {}
+    extra_repos: Mapping[str, RepoInfo] = {}
     base_packages: list[str] = ['base']
 
     def __init__(
         self,
         name: str,
         arch: Arch,
-        copy_base: bool = None,
-        initialize: bool = False,
-        extra_repos: dict[str, RepoInfo] = {},
-        base_packages: list[str] = ['base', 'base-devel', 'git'],
+        copy_base: bool,
+        initialize: bool,
+        extra_repos: Mapping[str, RepoInfo],
+        base_packages: list[str],
         path_override: str = None,
     ):
         pass
@@ -40,25 +41,35 @@ class AbstractChroot(Protocol):
     def initialize(self, reset: bool = False, fail_if_initialized: bool = False):
         raise NotImplementedError()
 
-    def activate(self, *args, **kwargs):
+    def activate(self, fail_if_active: bool):
         pass
 
-    def get_path(self, *args, **kwargs):
+    def get_path(self, *joins: str):
         pass
 
-    def run_cmd(self, *args, **kwargs):
+    def run_cmd(
+        self,
+        script: Union[str, list[str]],
+        inner_env: dict[str, str],
+        outer_env: dict[str, str],
+        attach_tty: bool,
+        capture_output: bool,
+        cwd: str,
+        fail_inactive: bool,
+        stdout: Optional[int],
+    ):
         pass
 
-    def mount_pacman_cache(self, *args, **kwargs):
+    def mount_pacman_cache(self, fail_if_mounted: bool):
         pass
 
-    def mount_packages(self, *args, **kwargs):
+    def mount_packages(self, fail_if_mounted: bool):
         pass
 
-    def mount_pkgbuilds(self, *args, **kwargs):
+    def mount_pkgbuilds(self, fail_if_mounted: bool):
         pass
 
-    def try_install_packages(self, *args, **kwargs):
+    def try_install_packages(self, packages: list[str], refresh: bool, allow_fail: bool) -> dict[str, Union[int, subprocess.CompletedProcess]]:
         pass
 
 
@@ -73,7 +84,7 @@ class Chroot(AbstractChroot):
         arch: Arch,
         copy_base: bool = None,
         initialize: bool = False,
-        extra_repos: dict[str, RepoInfo] = {},
+        extra_repos: Mapping[str, RepoInfo] = {},
         base_packages: list[str] = ['base', 'base-devel', 'git'],
         path_override: str = None,
     ):
@@ -84,7 +95,7 @@ class Chroot(AbstractChroot):
         self.arch = arch
         self.path = path_override or os.path.join(config.get_path('chroots'), name)
         self.copy_base = copy_base
-        self.extra_repos = extra_repos.copy()
+        self.extra_repos = deepcopy(extra_repos)
         self.base_packages = base_packages
         if initialize:
             self.initialize()
@@ -108,7 +119,7 @@ class Chroot(AbstractChroot):
 
         self.create_rootfs(reset, pacman_conf_target, active_previously)
 
-    def get_path(self, *joins) -> str:
+    def get_path(self, *joins: str) -> str:
         if joins:
             joins = (joins[0].lstrip('/'),) + joins[1:]
 
@@ -194,22 +205,24 @@ class Chroot(AbstractChroot):
         self.umount_many(self.active_mounts)
         self.active = False
 
-    def run_cmd(self,
-                script: Union[str, list[str]],
-                inner_env: dict[str, str] = {},
-                outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
-                attach_tty: bool = False,
-                capture_output: bool = False,
-                cwd: str = None,
-                fail_inactive: bool = True,
-                stdout=None) -> subprocess.CompletedProcess:
+    def run_cmd(
+        self,
+        script: Union[str, list[str]],
+        inner_env: dict[str, str] = {},
+        outer_env: dict[str, str] = os.environ.copy() | {'QEMU_LD_PREFIX': '/usr/aarch64-linux-gnu'},
+        attach_tty: bool = False,
+        capture_output: bool = False,
+        cwd: Optional[str] = None,
+        fail_inactive: bool = True,
+        stdout: Optional[int] = None,
+    ) -> Union[int, subprocess.CompletedProcess]:
         if not self.active and fail_inactive:
             raise Exception(f'Chroot {self.name} is inactive, not running command! Hint: pass `fail_inactive=False`')
         if outer_env is None:
             outer_env = os.environ.copy()
         env_cmd = ['/usr/bin/env'] + [f'{shell_quote(key)}={shell_quote(value)}' for key, value in inner_env.items()]
         run_func = subprocess.call if attach_tty else subprocess.run
-        kwargs = {
+        kwargs: dict = {
             'env': outer_env,
         }
         if not attach_tty:
@@ -225,8 +238,10 @@ class Chroot(AbstractChroot):
             script,
         ]
         logging.debug(f'{self.name}: Running cmd: "{cmd}"')
-        result = run_func(cmd, **kwargs)
-        return result
+        if attach_tty:
+            return subprocess.call(cmd, **kwargs)
+        else:
+            return subprocess.run(cmd, **kwargs)
 
     def mount_pkgbuilds(self, fail_if_mounted: bool = False) -> str:
         return self.mount(
@@ -253,7 +268,7 @@ class Chroot(AbstractChroot):
             fail_if_mounted=fail_if_mounted,
         )
 
-    def write_makepkg_conf(self, target_arch: Arch, cross_chroot_relative: str, cross: bool = True) -> str:
+    def write_makepkg_conf(self, target_arch: Arch, cross_chroot_relative: Optional[str], cross: bool = True) -> str:
         """
         Generate a `makepkg.conf` or `makepkg_cross_$arch.conf` file in /etc.
         If `cross` is set makepkg will be configured to crosscompile for the foreign chroot at `cross_chroot_relative`
@@ -296,13 +311,19 @@ class Chroot(AbstractChroot):
         if result.returncode != 0:
             raise Exception('Failed to setup user')
 
-    def try_install_packages(self, packages: list[str], refresh: bool = False, allow_fail: bool = True) -> dict[str, subprocess.CompletedProcess]:
+    def try_install_packages(
+        self,
+        packages: list[str],
+        refresh: bool = False,
+        allow_fail: bool = True,
+    ) -> dict[str, Union[int, subprocess.CompletedProcess]]:
         """Try installing packages, fall back to installing one by one"""
         results = {}
         if refresh:
             results['refresh'] = self.run_cmd('pacman -Syy --noconfirm')
         cmd = "pacman -S --noconfirm --needed --overwrite='/*'"
         result = self.run_cmd(f'{cmd} -y {" ".join(packages)}')
+        assert isinstance(result, subprocess.CompletedProcess)
         results |= {package: result for package in packages}
         if result.returncode != 0 and allow_fail:
             results = {}

@@ -1,7 +1,8 @@
-import glob
 import logging
 import os
 import subprocess
+from glob import glob
+from typing import Optional
 
 from config import config
 from constants import Arch, GCC_HOSTSPECS, CROSSDIRECT_PKGS, CHROOT_PATHS
@@ -66,7 +67,7 @@ class BuildChroot(Chroot):
         if active_previously:
             self.activate()
 
-    def mount_crossdirect(self, native_chroot: Chroot = None, fail_if_mounted: bool = False):
+    def mount_crossdirect(self, native_chroot: Optional[Chroot] = None, fail_if_mounted: bool = False):
         """
         mount `native_chroot` at `target_chroot`/native
         returns the absolute path that `native_chroot` has been mounted at.
@@ -85,10 +86,19 @@ class BuildChroot(Chroot):
         native_chroot.mount_pacman_cache()
         native_chroot.mount_packages()
         native_chroot.activate()
-        results = native_chroot.try_install_packages(CROSSDIRECT_PKGS + [gcc], refresh=True, allow_fail=False)
-        if results[gcc].returncode != 0:
+        results = dict(native_chroot.try_install_packages(
+            CROSSDIRECT_PKGS + [gcc],
+            refresh=True,
+            allow_fail=False,
+        ),)
+        res_gcc = results[gcc]
+        res_crossdirect = results['crossdirect']
+        assert isinstance(res_gcc, subprocess.CompletedProcess)
+        assert isinstance(res_crossdirect, subprocess.CompletedProcess)
+
+        if res_gcc.returncode != 0:
             logging.debug('Failed to install cross-compiler package {gcc}')
-        if results['crossdirect'].returncode != 0:
+        if res_crossdirect.returncode != 0:
             raise Exception('Failed to install crossdirect')
 
         cc_path = os.path.join(native_chroot.path, 'usr', 'bin', cc)
@@ -135,4 +145,5 @@ def get_build_chroot(arch: Arch, add_kupfer_repos: bool = True, **kwargs) -> Bui
     default = BuildChroot(name, arch, initialize=False, copy_base=True, extra_repos=repos)
     chroot = get_chroot(name, **kwargs, default=default)
     chroot.extra_repos = repos
+    assert (isinstance(chroot, BuildChroot))
     return chroot
