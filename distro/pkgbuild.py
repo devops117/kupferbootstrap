@@ -33,7 +33,7 @@ class Pkgbuild(PackageInfo):
         self.replaces = deepcopy(replaces)
 
     def __repr__(self):
-        return f'Package({self.name},{repr(self.path)},{self.version},{self.mode})'
+        return f'Pkgbuild({self.name},{repr(self.path)},{self.version},{self.mode})'
 
     def names(self):
         return list(set([self.name] + self.provides + self.replaces))

@@ -3,7 +3,7 @@ import subprocess
 
 
 def fastboot_erase_dtbo():
-    logging.info(f"Fastboot: Erasing DTBO")
+    logging.info("Fastboot: Erasing DTBO")
     subprocess.run(
         [
             'fastboot',

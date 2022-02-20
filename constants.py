@@ -57,7 +57,7 @@ FLAVOURS: dict[str, Flavour] = {
     'phosh': {
         'packages': [
             'phosh',
-            #'squeekboard', #temporarily disabled
+            # 'squeekboard', #temporarily disabled
             'gnome-control-center',
             'gnome-software',
             'gnome-software-packagekit-plugin',
