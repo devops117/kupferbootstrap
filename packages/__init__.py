@@ -17,7 +17,7 @@ from ssh import run_ssh_command, scp_put_files
 from wrapper import enforce_wrap
 from utils import git
 from binfmt import register as binfmt_register
-from distro.pkgbuild import Pkgbuild, parse_pkgbuild
+from .pkgbuild import Pkgbuild, parse_pkgbuild
 
 pacman_cmd = [
     'pacman',

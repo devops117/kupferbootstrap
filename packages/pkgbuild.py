@@ -5,7 +5,7 @@ import subprocess
 from chroot import Chroot
 from constants import CHROOT_PATHS, MAKEPKG_CMD
 
-from .package import PackageInfo
+from distro.package import PackageInfo
 
 
 class Pkgbuild(PackageInfo):
