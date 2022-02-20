@@ -1,4 +1,5 @@
-from typing import TypeAlias, TypedDict
+from typing_extensions import TypeAlias
+from typing import TypedDict
 
 FASTBOOT = 'fastboot'
 FLASH_PARTS = {
