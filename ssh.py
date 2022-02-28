@@ -1,30 +1,37 @@
+from typing import Optional
 import logging
 import os
 import pathlib
 import subprocess
 import click
+
 from config import config
 from constants import SSH_COMMON_OPTIONS, SSH_DEFAULT_HOST, SSH_DEFAULT_PORT
-from wrapper import enforce_wrap
 
 
 @click.command(name='ssh')
-def cmd_ssh():
-    """Establish SSH connection over USB to device"""
-    enforce_wrap()
-    run_ssh_command()
+@click.argument('cmd', nargs=-1)
+@click.option('--user', '-u', help='the SSH username', default=None)
+@click.option('--host', '-h', help='the SSH host', default=SSH_DEFAULT_HOST)
+@click.option('--port', '-p', help='the SSH port', type=int, default=SSH_DEFAULT_PORT)
+def cmd_ssh(cmd: list[str], user: str, host: str, port: int):
+    """Establish SSH connection to device"""
+    run_ssh_command(list(cmd), user=user, host=host, port=port)
 
 
-def run_ssh_command(cmd: list[str] = [], user: str = None, host: str = SSH_DEFAULT_HOST, port: int = SSH_DEFAULT_PORT):
+def run_ssh_command(cmd: list[str] = [], user: Optional[str] = None, host: str = SSH_DEFAULT_HOST, port: int = SSH_DEFAULT_PORT):
     if not user:
         user = config.get_profile()['username']
     keys = find_ssh_keys()
-    key_args = []
+    extra_args = []
     if len(keys) > 0:
-        key_args = ['-i', keys[0]]
+        extra_args += ['-i', keys[0]]
+    if config.runtime['verbose']:
+        extra_args += ['-v']
+    logging.info(f'Opening SSH connection to {host}')
     return subprocess.run([
         'ssh',
-    ] + key_args + SSH_COMMON_OPTIONS + [
+    ] + extra_args + SSH_COMMON_OPTIONS + [
         '-p',
         str(port),
         f'{user}@{host}',
