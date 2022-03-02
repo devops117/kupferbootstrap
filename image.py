@@ -43,7 +43,7 @@ def shrink_fs(loop_device: str, file: str, sector_size: int):
     # 8: 512 bytes sectors
     # 1: 4096 bytes sectors
     sectors_blocks_factor = 4096 // sector_size
-
+    partprobe(loop_device)
     logging.debug(f"Checking filesystem at {loop_device}p2")
     result = subprocess.run(['e2fsck', '-fy', f'{loop_device}p2'])
     if result.returncode > 2:
@@ -105,10 +105,11 @@ def shrink_fs(loop_device: str, file: str, sector_size: int):
     if end_sector == 0:
         raise Exception(f'Failed to find end sector of {loop_device}p2')
 
-    end_block = end_sector // sectors_blocks_factor
+    end_size = (end_sector + 1) * sector_size
 
-    logging.debug(f'Truncating {file} to {end_block} blocks')
-    result = subprocess.run(['truncate', '-o', '-s', str(end_block), file])
+    logging.debug(f'({end_sector} + 1) sectors * {sector_size} bytes/sector = {end_size} bytes')
+    logging.info(f'Truncating {file} to {end_size} bytes')
+    result = subprocess.run(['truncate', '-s', str(end_size), file])
     if result.returncode != 0:
         raise Exception(f'Failed to truncate {file}')
     partprobe(loop_device)
