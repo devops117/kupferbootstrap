@@ -309,13 +309,17 @@ def install_rootfs(rootfs_device: str, bootfs_device: str, device, flavour, arch
         user=user,
         password=profile['password'],
     )
-
     copy_ssh_keys(
         chroot.path,
         user=user,
     )
-    with open(os.path.join(chroot.path, 'etc', 'pacman.conf'), 'w') as file:
-        file.write(get_base_distro(arch).get_pacman_conf(check_space=True, extra_repos=get_kupfer_https(arch).repos))
+    files = {
+        'etc/pacman.conf': get_base_distro(arch).get_pacman_conf(check_space=True, extra_repos=get_kupfer_https(arch).repos),
+        'etc/sudoers.d/wheel': "# allow members of group wheel to execute any command\n%wheel ALL=(ALL:ALL) ALL\n",
+    }
+    for target, content in files.items():
+        with open(os.path.join(chroot.path, target.lstrip('/')), 'w') as file:
+            file.write(content)
     if post_cmds:
         result = chroot.run_cmd(' && '.join(post_cmds))
         assert isinstance(result, subprocess.CompletedProcess)
