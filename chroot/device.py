@@ -2,7 +2,9 @@ import atexit
 import os
 
 from constants import Arch, BASE_PACKAGES
+from distro.distro import get_kupfer_local, get_kupfer_https
 from utils import check_findmnt
+from typing import Optional
 
 from .base import BaseChroot
 from .build import BuildChroot
@@ -44,11 +46,15 @@ def get_device_chroot(
     flavour: str,
     arch: Arch,
     packages: list[str] = BASE_PACKAGES,
-    extra_repos={},
+    use_local_repos: bool = True,
+    extra_repos: Optional[dict] = None,
     **kwargs,
 ) -> DeviceChroot:
     name = f'rootfs_{device}-{flavour}'
-    default = DeviceChroot(name, arch, initialize=False, copy_base=False, base_packages=packages, extra_repos=extra_repos)
-    chroot = get_chroot(name, **kwargs, default=default)
-    assert (isinstance(chroot, DeviceChroot))
+    repos = dict(get_kupfer_local(arch).repos if use_local_repos else get_kupfer_https(arch).repos)
+    repos.update(extra_repos or {})
+
+    default = DeviceChroot(name, arch, initialize=False, copy_base=False, base_packages=packages, extra_repos=repos)
+    chroot = get_chroot(name, **kwargs, extra_repos=repos, default=default)
+    assert isinstance(chroot, DeviceChroot)
     return chroot

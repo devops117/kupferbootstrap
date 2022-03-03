@@ -43,11 +43,9 @@ class BaseChroot(Chroot):
         self.initialized = True
 
 
-def get_base_chroot(arch: Arch, **kwargs) -> BaseChroot:
+def get_base_chroot(arch: Arch) -> BaseChroot:
     name = base_chroot_name(arch)
-    default = BaseChroot(name, arch, initialize=False, copy_base=False)
-    if kwargs.pop('initialize', False):
-        logging.debug('get_base_chroot: Had to remove "initialize" from args. This indicates a bug.')
-    chroot = get_chroot(name, **kwargs, initialize=False, default=default)
-    assert (isinstance(chroot, BaseChroot))
+    default = BaseChroot(name, arch, copy_base=False, initialize=False)
+    chroot = get_chroot(name, initialize=False, default=default)
+    assert isinstance(chroot, BaseChroot)
     return chroot

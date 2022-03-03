@@ -10,9 +10,9 @@ from subprocess import run, CompletedProcess
 from typing import Optional
 
 from chroot.device import DeviceChroot, get_device_chroot
-from constants import BASE_PACKAGES, DEVICES, FLAVOURS
+from constants import Arch, BASE_PACKAGES, DEVICES, FLAVOURS
 from config import config, Profile
-from distro.distro import get_base_distro, get_kupfer_https, get_kupfer_local
+from distro.distro import get_base_distro, get_kupfer_https
 from packages import build_enable_qemu_binfmt, discover_packages, build_packages
 from ssh import copy_ssh_keys
 from wrapper import enforce_wrap
@@ -296,10 +296,19 @@ def create_boot_fs(device: str, blocksize: int):
     create_filesystem(device, blocksize=blocksize, label='kupfer_boot', fstype='ext2')
 
 
-def install_rootfs(rootfs_device: str, bootfs_device: str, device, flavour, arch, packages, extra_repos, profile):
+def install_rootfs(
+    rootfs_device: str,
+    bootfs_device: str,
+    device: str,
+    flavour: str,
+    arch: Arch,
+    packages: list[str],
+    use_local_repos: bool,
+    profile: Profile,
+):
     user = profile['username'] or 'kupfer'
     post_cmds = FLAVOURS[flavour].get('post_cmds', [])
-    chroot = get_device_chroot(device=device, flavour=flavour, arch=arch, packages=packages, extra_repos=extra_repos)
+    chroot = get_device_chroot(device=device, flavour=flavour, arch=arch, packages=packages, use_local_repos=use_local_repos)
 
     mount_chroot(rootfs_device, bootfs_device, chroot)
 
@@ -362,10 +371,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
     build_enable_qemu_binfmt(arch)
 
     packages_dir = config.get_package_dir(arch)
-    if os.path.exists(os.path.join(packages_dir, 'main')):
-        extra_repos = get_kupfer_local(arch).repos
-    else:
-        extra_repos = get_kupfer_https(arch).repos
+    use_local_repos = os.path.exists(os.path.join(packages_dir, 'main'))
     packages = BASE_PACKAGES + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
 
     if build_pkgs:
@@ -406,7 +412,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
         flavour,
         arch,
         packages,
-        extra_repos,
+        use_local_repos,
         profile,
     )
 

@@ -22,8 +22,8 @@ class AbstractChroot(Protocol):
     copy_base: bool
     initialized: bool = False
     active: bool = False
-    active_mounts: list[str] = []
-    extra_repos: Mapping[str, RepoInfo] = {}
+    active_mounts: list[str]
+    extra_repos: Mapping[str, RepoInfo]
     base_packages: list[str] = ['base']
 
     def __init__(
@@ -91,12 +91,13 @@ class Chroot(AbstractChroot):
         if copy_base is None:
             logging.debug(f'{name}: copy_base is none!')
             copy_base = (name == base_chroot_name(arch))
+        self.active_mounts = list[str]()
         self.name = name
         self.arch = arch
         self.path = path_override or os.path.join(config.get_path('chroots'), name)
         self.copy_base = copy_base
         self.extra_repos = deepcopy(extra_repos)
-        self.base_packages = base_packages
+        self.base_packages = base_packages.copy()
         if initialize:
             self.initialize()
         if self.name.startswith(BASE_CHROOT_PREFIX) and set(get_kupfer_local(self.arch).repos).intersection(set(self.extra_repos)):
@@ -341,6 +342,7 @@ def get_chroot(
     initialize: bool = False,
     activate: bool = False,
     fail_if_exists: bool = False,
+    extra_repos: Optional[Mapping[str, RepoInfo]] = None,
     default: Chroot = None,
 ) -> Chroot:
     global chroots
@@ -350,6 +352,8 @@ def get_chroot(
     elif fail_if_exists:
         raise Exception(f'chroot {name} already exists')
     chroot = chroots[name]
+    if extra_repos is not None:
+        chroot.extra_repos = dict(extra_repos)  # copy to new dict
     if initialize:
         chroot.initialize()
     if activate:

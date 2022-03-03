@@ -143,7 +143,6 @@ def get_build_chroot(arch: Arch, add_kupfer_repos: bool = True, **kwargs) -> Bui
         raise Exception('extra_repos!')
     repos = get_kupfer_local(arch).repos if add_kupfer_repos else {}
     default = BuildChroot(name, arch, initialize=False, copy_base=True, extra_repos=repos)
-    chroot = get_chroot(name, **kwargs, default=default)
-    chroot.extra_repos = repos
-    assert (isinstance(chroot, BuildChroot))
+    chroot = get_chroot(name, **kwargs, extra_repos=repos, default=default)
+    assert isinstance(chroot, BuildChroot)
     return chroot
