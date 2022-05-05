@@ -144,9 +144,9 @@ def resolve_profile(
     # now init missing keys
     for key, value in PROFILE_DEFAULTS.items():
         if key not in full.keys():
-            full[key] = None  # type: ignore[misc]
+            full[key] = None  # type: ignore[literal-required]
             if type(value) == list:
-                full[key] = []  # type: ignore[misc]
+                full[key] = []  # type: ignore[literal-required]
 
     full['size_extra_mb'] = int(full['size_extra_mb'] or 0)
 
