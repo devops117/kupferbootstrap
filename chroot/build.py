@@ -24,20 +24,10 @@ class BuildChroot(Chroot):
                 raise Exception('base_chroot == self, bailing out. this is a bug')
             base_chroot.initialize()
             logging.info(f'Copying {base_chroot.name} chroot to {self.name}')
-            result = subprocess.run([
-                'rsync',
-                '-a',
-                '--delete',
-                '-q',
-                '-W',
-                '-x',
-                '--exclude',
-                CHROOT_PATHS['pkgbuilds'].strip('/'),
-                '--exclude',
-                CHROOT_PATHS['packages'].strip('/'),
-                f'{base_chroot.path}/',
-                f'{self.path}/',
-            ])
+            cmd = ['rsync', '-a', '--delete', '-q', '-W', '-x']
+            for mountpoint in CHROOT_PATHS:
+                cmd += ['--exclude', mountpoint.rstrip('/')]
+            result = subprocess.run(cmd + [f'{base_chroot.path}/', f'{self.path}/'])
             if result.returncode != 0:
                 raise Exception(f'Failed to copy {base_chroot.name} to {self.name}')
 
