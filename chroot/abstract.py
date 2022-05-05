@@ -5,6 +5,7 @@ import subprocess
 from copy import deepcopy
 from shlex import quote as shell_quote
 from typing import Protocol, Union, Optional, Mapping
+from uuid import uuid4
 
 from config import config
 from constants import Arch, CHROOT_PATHS
@@ -20,11 +21,11 @@ class AbstractChroot(Protocol):
     arch: Arch
     path: str
     copy_base: bool
-    initialized: bool = False
-    active: bool = False
+    initialized: bool
+    active: bool
     active_mounts: list[str]
     extra_repos: Mapping[str, RepoInfo]
-    base_packages: list[str] = ['base']
+    base_packages: list[str]
 
     def __init__(
         self,
@@ -88,9 +89,12 @@ class Chroot(AbstractChroot):
         base_packages: list[str] = ['base', 'base-devel', 'git'],
         path_override: str = None,
     ):
+        self.uuid = uuid4()
         if copy_base is None:
             logging.debug(f'{name}: copy_base is none!')
             copy_base = (name == base_chroot_name(arch))
+        self.active = False
+        self.initialized = False
         self.active_mounts = list[str]()
         self.name = name
         self.arch = arch
@@ -347,10 +351,13 @@ def get_chroot(
 ) -> Chroot:
     global chroots
     if default and name not in chroots:
-        logging.debug(f'Adding chroot {name} to chroot map')
+        logging.debug(f'Adding chroot {name} to chroot map: {default.uuid}')
         chroots[name] = default
-    elif fail_if_exists:
-        raise Exception(f'chroot {name} already exists')
+    else:
+        existing = chroots[name]
+        if fail_if_exists:
+            raise Exception(f'chroot {name} already exists: {existing.uuid}')
+        logging.debug(f"returning existing chroot {name}: {existing.uuid}")
     chroot = chroots[name]
     if extra_repos is not None:
         chroot.extra_repos = dict(extra_repos)  # copy to new dict
