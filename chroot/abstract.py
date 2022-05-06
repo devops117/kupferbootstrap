@@ -116,11 +116,12 @@ class Chroot(AbstractChroot):
         if self.initialized and not reset:
             # chroot must have been initialized already!
             if fail_if_initialized:
-                raise Exception(f"Chroot {self.name} is already initialized, this seems like a bug")
+                raise Exception(f"Chroot {self.name} ({self.uuid}) is already initialized, this seems like a bug")
+            logging.debug(f"Base chroot {self.name} ({self.uuid}) already initialized")
             return
 
         active_previously = self.active
-        self.deactivate_core()
+        self.deactivate(fail_if_inactive=False, ignore_rootfs=True)
 
         self.create_rootfs(reset, pacman_conf_target, active_previously)
 
@@ -203,11 +204,11 @@ class Chroot(AbstractChroot):
         # additional mounts like crossdirect are intentionally left intact. Is such a chroot still `active` afterwards?
         self.active = False
 
-    def deactivate(self, fail_if_inactive: bool = False):
+    def deactivate(self, fail_if_inactive: bool = False, ignore_rootfs: bool = False):
         if not self.active:
             if fail_if_inactive:
                 raise Exception(f"Chroot {self.name} not activated, can't deactivate!")
-        self.umount_many(self.active_mounts)
+        self.umount_many([mnt for mnt in self.active_mounts if mnt != '/' or not ignore_rootfs])
         self.active = False
 
     def run_cmd(

@@ -8,7 +8,6 @@ from wrapper import enforce_wrap
 from .abstract import Chroot
 from .base import get_base_chroot
 from .build import get_build_chroot, BuildChroot
-#from .device import get_device_chroot, DeviceChroot
 from .helpers import get_chroot_path
 
 # export Chroot class
@@ -58,5 +57,4 @@ def cmd_chroot(type: str = 'build', arch: str = None, enable_crossdirect=True):
 
     chroot.activate()
     logging.debug(f'Starting shell in {chroot.name}:')
-    chroot.run_cmd('bash', attach_tty=True)
     chroot.run_cmd('bash', attach_tty=True)
