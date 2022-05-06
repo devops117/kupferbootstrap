@@ -25,9 +25,11 @@ class BuildChroot(Chroot):
             base_chroot.initialize()
             logging.info(f'Copying {base_chroot.name} chroot to {self.name}')
             cmd = ['rsync', '-a', '--delete', '-q', '-W', '-x']
-            for mountpoint in CHROOT_PATHS:
+            for mountpoint in CHROOT_PATHS.values():
                 cmd += ['--exclude', mountpoint.rstrip('/')]
-            result = subprocess.run(cmd + [f'{base_chroot.path}/', f'{self.path}/'])
+            cmd += [f'{base_chroot.path}/', f'{self.path}/']
+            logging.debug(f"running rsync: {cmd}")
+            result = subprocess.run(cmd)
             if result.returncode != 0:
                 raise Exception(f'Failed to copy {base_chroot.name} to {self.name}')
 
