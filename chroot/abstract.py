@@ -208,7 +208,7 @@ class Chroot(AbstractChroot):
         if not self.active:
             if fail_if_inactive:
                 raise Exception(f"Chroot {self.name} not activated, can't deactivate!")
-        self.umount_many([mnt for mnt in self.active_mounts if mnt != '/' or not ignore_rootfs])
+        self.umount_many([mnt for mnt in self.active_mounts if mnt not in ['/', '/boot'] or not ignore_rootfs])
         self.active = False
 
     def run_cmd(
