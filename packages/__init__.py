@@ -31,7 +31,7 @@ pacman_cmd = [
 def get_makepkg_env():
     # has to be a function because calls to `config` must be done after config file was read
     threads = config.file['build']['threads'] or multiprocessing.cpu_count()
-    return os.environ.copy() | {
+    return {key: val for key, val in os.environ.items() if not key.split('_', maxsplit=1)[0] in ['CI', 'GITLAB', 'FF']} | {
         'LANG': 'C',
         'CARGO_BUILD_JOBS': str(threads),
         'MAKEFLAGS': f"-j{threads}",
