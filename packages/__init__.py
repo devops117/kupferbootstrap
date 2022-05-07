@@ -647,12 +647,14 @@ def cmd_sideload(paths: Iterable[str]):
 @click.option('-n', '--noop', is_flag=True, default=False, help="Print what would be removed but dont execute")
 @click.argument('what', type=click.Choice(['all', 'src', 'pkg']), nargs=-1)
 def cmd_clean(what: Iterable[str] = ['all'], force: bool = False, noop: bool = False):
-    """Remove files and directories not tracked in PKGBUILDs.git"""
+    """Remove files and directories not tracked in PKGBUILDs.git. Passing in an empty `what` defaults it to `['all']`"""
     enforce_wrap()
     if noop:
         logging.debug('Running in noop mode!')
     if force:
         logging.debug('Running in FORCE mode!')
+    what = what or ['all']
+    logging.debug(f'Clearing {what} from PKGBUILDs')
     pkgbuilds = config.get_path('pkgbuilds')
     if 'all' in what:
         warning = "Really reset PKGBUILDs to git state completely?\nThis will erase any untracked changes to your PKGBUILDs directory."
@@ -677,7 +679,7 @@ def cmd_clean(what: Iterable[str] = ['all'], force: bool = False, noop: bool = F
                 dirs += glob(os.path.join(pkgbuilds, '*', '*', loc))
 
         dir_lines = '\n'.join(dirs)
-        verb = 'Would remove' if noop or force else 'Removing'
+        verb = 'Would remove' if noop else 'Removing'
         logging.info(verb + ' directories:\n' + dir_lines)
 
         if not (noop or force):
