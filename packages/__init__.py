@@ -553,13 +553,13 @@ def build_packages_by_paths(
 def build_enable_qemu_binfmt(arch: Arch, repo: dict[str, Pkgbuild] = None):
     if arch not in ARCHES:
         raise Exception(f'Unknown architecture "{arch}". Choices: {", ".join(ARCHES)}')
+    logging.info('Installing qemu-user (building if necessary)')
     enforce_wrap()
     if not repo:
         repo = discover_packages()
     native = config.runtime['arch']
     # build qemu-user, binfmt, crossdirect
     chroot = setup_build_chroot(native)
-    logging.info('Installing qemu-user (building if necessary)')
     build_packages_by_paths(
         ['cross/' + pkg for pkg in CROSSDIRECT_PKGS],
         native,

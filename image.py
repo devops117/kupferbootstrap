@@ -355,10 +355,11 @@ def cmd_image():
 
 @cmd_image.command(name='build')
 @click.argument('profile_name', required=False)
-@click.option('--build-pkgs/--no-build-pkgs', '-p/-P', default=True, help='Whether to build missing/outdated packages. Defaults to true.')
+@click.option('--local-repos/--no-local-repos', '-l/-L', default=True, help='Whether to use local packages. Defaults to true.')
+@click.option('--build-pkgs/--no-build-pkgs', '-p/-P', default=True, help='Whether to build missing/outdated local packages. Defaults to true.')
 @click.option('--block-target', default=None, help='Override the block device file to target')
 @click.option('--skip-part-images', default=False, help='Skip creating image files for the partitions and directly work on the target block device.')
-def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: str = None, skip_part_images: bool = False):
+def cmd_build(profile_name: str = None, local_repos: bool = True, build_pkgs: bool = True, block_target: str = None, skip_part_images: bool = False):
     """Build a device image"""
     enforce_wrap()
     profile: Profile = config.get_profile(profile_name)
@@ -370,13 +371,13 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
     sector_size = 4096
     rootfs_size_mb = FLAVOURS[flavour].get('size', 2) * 1000
 
-    build_enable_qemu_binfmt(arch)
-
-    packages_dir = config.get_package_dir(arch)
-    use_local_repos = os.path.exists(os.path.join(packages_dir, 'main'))
     packages = BASE_PACKAGES + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
 
-    if build_pkgs:
+    if arch != config.runtime['native']:
+        build_enable_qemu_binfmt(arch)
+
+    if local_repos and build_pkgs:
+        logging.info("Making sure all packages are built")
         repo = discover_packages()
         build_packages(repo, [p for name, p in repo.items() if name in packages], arch)
 
@@ -414,7 +415,7 @@ def cmd_build(profile_name: str = None, build_pkgs: bool = True, block_target: s
         flavour,
         arch,
         packages,
-        use_local_repos,
+        local_repos,
         profile,
     )
 
