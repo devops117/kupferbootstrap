@@ -6,6 +6,8 @@ import logging
 from copy import deepcopy
 from typing import Optional, Union, TypedDict, Any, Mapping
 
+from constants import DEFAULT_PACKAGE_BRANCH
+
 CONFIG_DIR = appdirs.user_config_dir('kupfer')
 CACHE_DIR = appdirs.user_cache_dir('kupfer')
 
@@ -51,10 +53,11 @@ CONFIG_DEFAULTS: dict = {
     },
     'pkgbuilds': {
         'git_repo': 'https://gitlab.com/kupfer/packages/pkgbuilds.git',
-        'git_branch': 'dev',
+        'git_branch': DEFAULT_PACKAGE_BRANCH,
     },
     'pacman': {
         'parallel_downloads': 4,
+        'repo_branch': DEFAULT_PACKAGE_BRANCH,
     },
     'paths': {
         'cache_dir': CACHE_DIR,

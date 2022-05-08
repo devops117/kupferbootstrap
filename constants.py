@@ -82,7 +82,8 @@ REPOSITORIES = [
     'phosh',
 ]
 
-KUPFER_HTTPS = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/main/$repo'
+DEFAULT_PACKAGE_BRANCH = 'dev'
+KUPFER_HTTPS = 'https://gitlab.com/kupfer/packages/prebuilts/-/raw/%branch%/$arch/$repo'
 
 Arch: TypeAlias = str
 ARCHES = [

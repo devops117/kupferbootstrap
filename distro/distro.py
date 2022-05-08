@@ -56,7 +56,7 @@ def get_kupfer(arch: str, url_template: str) -> Distro:
 
 
 def get_kupfer_https(arch: str) -> Distro:
-    return get_kupfer(arch, KUPFER_HTTPS)
+    return get_kupfer(arch, KUPFER_HTTPS.replace('%branch%', config.file['pacman']['repo_branch']))
 
 
 def get_kupfer_local(arch: Optional[str] = None, in_chroot: bool = True) -> Distro:
