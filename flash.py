@@ -18,9 +18,9 @@ ROOTFS = FLASH_PARTS['ROOTFS']
 
 @click.command(name='flash')
 @click.argument('what', type=click.Choice(list(FLASH_PARTS.values())))
-@click.argument('location', required=False, type=click.Choice(LOCATIONS))
-def cmd_flash(what, location):
-    """Flash a partition onto a device"""
+@click.argument('location', type=str, required=False)
+def cmd_flash(what: str, location: str):
+    """Flash a partition onto a device. `location` takes either a path to a block device or one of emmc, sdcard"""
     enforce_wrap()
     device, flavour = get_device_and_flavour()
     device_image_name = get_image_name(device, flavour)

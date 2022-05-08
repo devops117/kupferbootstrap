@@ -23,7 +23,7 @@ IMG_FILE_BOOT_DEFAULT_SIZE = "90M"
 
 
 def dd_image(input: str, output: str, blocksize='1M') -> CompletedProcess:
-    return subprocess.run([
+    cmd = [
         'dd',
         f'if={input}',
         f'of={output}',
@@ -32,7 +32,9 @@ def dd_image(input: str, output: str, blocksize='1M') -> CompletedProcess:
         'oflag=direct',
         'status=progress',
         'conv=sync,noerror',
-    ])
+    ]
+    logging.debug(f'running dd cmd: {cmd}')
+    return subprocess.run(cmd)
 
 
 def partprobe(device: str):
