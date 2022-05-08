@@ -373,7 +373,7 @@ def cmd_build(profile_name: str = None, local_repos: bool = True, build_pkgs: bo
 
     packages = BASE_PACKAGES + DEVICES[device] + FLAVOURS[flavour]['packages'] + profile['pkgs_include']
 
-    if arch != config.runtime['native']:
+    if arch != config.runtime['arch']:
         build_enable_qemu_binfmt(arch)
 
     if local_repos and build_pkgs:
