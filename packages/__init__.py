@@ -708,6 +708,14 @@ def cmd_list():
 def cmd_check(paths):
     """Check that specified PKGBUILDs are formatted correctly"""
     enforce_wrap()
+
+    def check_quoteworthy(s: str) -> bool:
+        quoteworthy = ['"', "'", "$", " ", ";", "&", "<", ">", "*", "?"]
+        for symbol in quoteworthy:
+            if symbol in s:
+                return True
+        return False
+
     paths = list(paths)
     packages = filter_packages_by_paths(discover_packages(), paths, allow_empty_results=False)
 
@@ -814,11 +822,11 @@ def cmd_check(paths):
                     formatted = False
                     reason = 'Multiline variables should be indented with 4 spaces'
 
-                if '"' in line and '$' not in line and ' ' not in line and ';' not in line:
+                if '"' in line and not check_quoteworthy(line):
                     formatted = False
-                    reason = 'Found literal " although no "$", " " or ";" was found in the line justifying the usage of a literal "'
+                    reason = 'Found literal " although no special character was found in the line to justify the usage of a literal "'
 
-                if '\'' in line:
+                if "'" in line and not '"' in line:
                     formatted = False
                     reason = 'Found literal \' although either a literal " or no qoutes should be used'
 
