@@ -1,6 +1,7 @@
 stages:
   - check
   - build
+  - deploy
 
 format:
   stage: check
@@ -33,4 +34,27 @@ build_docker:
     - docker push -a "${CI_REGISTRY_IMAGE}"
   only:
     - main
+    - dev
+
+.docs:
+  image: "${CI_REGISTRY_IMAGE}:dev"
+  before_script:
+    - pacman -Sy --noconfirm python-sphinx-{click,furo}
+  script:
+    - (cd docs && make)
+    - mv docs/html public
+  artifacts:
+    paths:
+      - public
+
+build_docs:
+  stage: build
+  extends: .docs
+  except:
+    - dev
+
+pages:
+  stage: deploy
+  extends: .docs
+  only:
     - dev

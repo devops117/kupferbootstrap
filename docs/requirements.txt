@@ -1,0 +1,3 @@
+sphinx-click
+# furo sphinx theme
+furo
