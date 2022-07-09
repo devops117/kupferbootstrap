@@ -51,10 +51,10 @@ build_docs:
   stage: build
   extends: .docs
   except:
-    - dev
+    - main
 
 pages:
   stage: deploy
   extends: .docs
   only:
-    - dev
+    - main
