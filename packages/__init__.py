@@ -306,17 +306,39 @@ def add_file_to_repo(file_path: str, repo_name: str, arch: Arch):
             os.unlink(old)
 
 
+def strip_compression_extension(filename: str):
+    for ext in ['zst', 'xz', 'gz', 'bz2']:
+        if filename.endswith(f'.pkg.tar.{ext}'):
+            return filename[:-(len(ext) + 1)]
+    logging.warning(f"file {filename} matches no known package extension")
+    return filename
+
+
 def add_package_to_repo(package: Pkgbuild, arch: Arch):
+
     logging.info(f'Adding {package.path} to repo {package.repo}')
-    pkgbuild_dir = os.path.join(config.get_path('pkgbuilds'), package.path)
+    pkgbuild_dir = os.path.join(config.get_path('pkgbuilds'), package.path)  # TODO: use CHROOT_PATHS?
 
     files = []
     for file in os.listdir(pkgbuild_dir):
+        stripped_name = strip_compression_extension(file)
         # Forced extension by makepkg.conf
-        if file.endswith('.pkg.tar.xz') or file.endswith('.pkg.tar.zst'):
-            repo_dir = os.path.join(config.get_package_dir(arch), package.repo)
-            files.append(os.path.join(repo_dir, file))
-            add_file_to_repo(os.path.join(pkgbuild_dir, file), package.repo, arch)
+        if not stripped_name.endswith('.pkg.tar'):
+            continue
+
+        repo_file = os.path.join(config.get_package_dir(arch), package.repo, file)
+        files.append(repo_file)
+        add_file_to_repo(os.path.join(pkgbuild_dir, file), package.repo, arch)
+
+        # copy any-arch packages to other repos as well
+        if stripped_name.endswith('any.pkg.tar'):
+            for repo_arch in ARCHES:
+                if repo_arch == arch:
+                    continue
+                copy_target = os.path.join(config.get_package_dir(repo_arch), package.repo, file)
+                shutil.copy(repo_file, copy_target)
+                add_file_to_repo(copy_target, package.repo, repo_arch)
+
     return files
 
 
@@ -343,15 +365,49 @@ def check_package_version_built(package: Pkgbuild, arch: Arch) -> bool:
     if result.returncode != 0:
         raise Exception(f'Failed to get package list for {package.path}:' + '\n' + result.stdout.decode() + '\n' + result.stderr.decode())
 
-    missing = False
+    missing = True
     for line in result.stdout.decode('utf-8').split('\n'):
-        if line != "":
-            file = os.path.join(config.get_package_dir(arch), package.repo, os.path.basename(line))
-            logging.debug(f'Checking if {file} is built')
-            if os.path.exists(file):
-                add_file_to_repo(file, repo_name=package.repo, arch=arch)
+        if not line:
+            continue
+        basename = os.path.basename(line)
+        file = os.path.join(config.get_package_dir(arch), package.repo, basename)
+        filename_stripped = strip_compression_extension(file)
+        logging.debug(f'Checking if {file} is built')
+        if not filename_stripped.endswith('.pkg.tar'):
+            logging.debug(f'skipping unknown file extension {basename}')
+            continue
+        if os.path.exists(file):
+            missing = False
+            add_file_to_repo(file, repo_name=package.repo, arch=arch)
+            # copy arch=(any) packages to all arches
+        if filename_stripped.endswith('any.pkg.tar'):
+            logging.info("any-arch pkg detected")
+            target_repo_file = os.path.join(config.get_package_dir(arch), package.repo, basename)
+            if os.path.exists(target_repo_file):
+                missing = False
             else:
-                missing = True
+                # we have to check if another arch's repo holds our any-arch pkg
+                for repo_arch in ARCHES:
+                    if repo_arch == arch:
+                        continue  # we already checked that
+                    other_repo_path = os.path.join(config.get_package_dir(repo_arch), package.repo, basename)
+                    if os.path.exists(other_repo_path):
+                        missing = False
+                        logging.info(f"package {file} found in {repo_arch} repos, copying to {arch}")
+                        shutil.copyfile(other_repo_path, target_repo_file)
+                        add_file_to_repo(target_repo_file, package.repo, arch)
+                        break
+
+            if os.path.exists(target_repo_file):
+                # copy to other arches if they don't have it
+                for repo_arch in ARCHES:
+                    if repo_arch == arch:
+                        continue  # we already have that
+                    copy_target = os.path.join(config.get_package_dir(repo_arch), package.repo, basename)
+                    if not os.path.exists(copy_target):
+                        logging.info(f"copying to {copy_target}")
+                        shutil.copyfile(target_repo_file, copy_target)
+                        add_file_to_repo(copy_target, package.repo, repo_arch)
 
     return not missing
 
