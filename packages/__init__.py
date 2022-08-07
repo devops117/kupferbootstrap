@@ -527,7 +527,13 @@ def build_package(
         raise Exception(f'Failed to compile package {package.path}')
 
 
-def get_unbuilt_package_levels(repo: dict[str, Pkgbuild], packages: Iterable[Pkgbuild], arch: Arch, force: bool = False) -> list[set[Pkgbuild]]:
+def get_unbuilt_package_levels(
+    repo: dict[str, Pkgbuild],
+    packages: Iterable[Pkgbuild],
+    arch: Arch,
+    force: bool = False,
+    rebuild_dependants: bool = False,
+) -> list[set[Pkgbuild]]:
     package_levels = generate_dependency_chain(repo, packages)
     build_names = set[str]()
     build_levels = list[set[Pkgbuild]]()
@@ -535,8 +541,8 @@ def get_unbuilt_package_levels(repo: dict[str, Pkgbuild], packages: Iterable[Pkg
     for level_packages in package_levels:
         level = set[Pkgbuild]()
         for package in level_packages:
-            if ((not check_package_version_built(package, arch)) or set.intersection(set(package.depends), set(build_names)) or
-                (force and package in packages)):
+            if (not check_package_version_built(package, arch) or (force and package in packages) or
+                (rebuild_dependants and set.intersection(set(package.depends), set(build_names)))):
                 level.add(package)
                 build_names.update(package.names())
         if level:
@@ -551,12 +557,13 @@ def build_packages(
     packages: Iterable[Pkgbuild],
     arch: Arch,
     force: bool = False,
+    rebuild_dependants: bool = False,
     enable_crosscompile: bool = True,
     enable_crossdirect: bool = True,
     enable_ccache: bool = True,
     clean_chroot: bool = False,
 ):
-    build_levels = get_unbuilt_package_levels(repo, packages, arch, force=force)
+    build_levels = get_unbuilt_package_levels(repo, packages, arch, force=force, rebuild_dependants=rebuild_dependants)
 
     if not build_levels:
         logging.info('Everything built already')
@@ -583,6 +590,7 @@ def build_packages_by_paths(
     arch: Arch,
     repo: dict[str, Pkgbuild],
     force=False,
+    rebuild_dependants: bool = False,
     enable_crosscompile: bool = True,
     enable_crossdirect: bool = True,
     enable_ccache: bool = True,
@@ -599,6 +607,7 @@ def build_packages_by_paths(
         packages,
         arch,
         force=force,
+        rebuild_dependants=rebuild_dependants,
         enable_crosscompile=enable_crosscompile,
         enable_crossdirect=enable_crossdirect,
         enable_ccache=enable_ccache,
@@ -645,8 +654,9 @@ def cmd_update(non_interactive: bool = False):
 @cmd_packages.command(name='build')
 @click.option('--force', is_flag=True, default=False, help='Rebuild even if package is already built')
 @click.option('--arch', default=None, help="The CPU architecture to build for")
+@click.option('--rebuild-dependants', is_flag=True, default=False, help='Rebuild packages that depend on packages that will be [re]built')
 @click.argument('paths', nargs=-1)
-def cmd_build(paths: list[str], force=False, arch=None):
+def cmd_build(paths: list[str], force=False, arch=None, rebuild_dependants: bool = False):
     """
     Build packages by paths.
 
@@ -654,10 +664,10 @@ def cmd_build(paths: list[str], force=False, arch=None):
 
     Multiple paths may be specified as separate arguments.
     """
-    build(paths, force, arch)
+    build(paths, force, arch, rebuild_dependants)
 
 
-def build(paths: Iterable[str], force: bool, arch: Optional[Arch]):
+def build(paths: Iterable[str], force: bool, arch: Optional[Arch], rebuild_dependants: bool = False):
     # TODO: arch = config.get_profile()...
     arch = arch or 'aarch64'
 
@@ -674,6 +684,7 @@ def build(paths: Iterable[str], force: bool, arch: Optional[Arch]):
         arch,
         repo,
         force=force,
+        rebuild_dependants=rebuild_dependants,
         enable_crosscompile=config.file['build']['crosscompile'],
         enable_crossdirect=config.file['build']['crossdirect'],
         enable_ccache=config.file['build']['ccache'],
