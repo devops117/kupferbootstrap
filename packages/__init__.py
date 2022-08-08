@@ -7,12 +7,15 @@ import subprocess
 from copy import deepcopy
 from joblib import Parallel, delayed
 from glob import glob
-from shutil import rmtree
+from urllib import HTTPError
+from urllib.request import urlopen
+from shutil import rmtree, copyfileobj
 from typing import Iterable, Iterator, Any, Optional
 
 from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch, CHROOT_PATHS, MAKEPKG_CMD
 from config import config
 from chroot.build import get_build_chroot, BuildChroot
+from distro.distro import Distro, PackageInfo, get_kupfer_https as _get_kupfer_https
 from ssh import run_ssh_command, scp_put_files
 from wrapper import enforce_wrap
 from utils import git
@@ -342,7 +345,51 @@ def add_package_to_repo(package: Pkgbuild, arch: Arch):
     return files
 
 
-def check_package_version_built(package: Pkgbuild, arch: Arch) -> bool:
+_kupfer_https = dict[Arch, Distro]()
+
+
+def get_kupfer_https_distro(arch: Arch, scan: bool = True) -> Distro:
+    global _kupfer_https
+    if arch not in _kupfer_https or not _kupfer_https[arch]:
+        _kupfer_https[arch] = _get_kupfer_https(arch, scan=scan)
+    return _kupfer_https[arch]
+
+
+def try_download_package(dest_file_path: str, package: Pkgbuild, arch: Arch) -> bool:
+    filename = os.path.basename(dest_file_path)
+    pkgname = package.name
+    repo_name = package.repo
+    repos = get_kupfer_https_distro(arch).repos
+    if repo_name not in repos:
+        logging.warning(f"Repository {repo_name} is not a known HTTPS repo")
+        return False
+    repo = repos[repo_name]
+    if pkgname not in repo.packages:
+        logging.debug(f"Package {pkgname} not found remote")
+        return False
+    repo_pkg: PackageInfo = repo.packages[pkgname]
+    if repo_pkg.version != package.version:
+        logging.debug(f"Package {pkgname} versions mismatch: local: {package.version}, remote: {repo_pkg.version}")
+        return False
+    if repo_pkg.filename != filename:
+        logging.debug(f"package filenames don't match: local: {filename}, remote: {repo_pkg.filename}")
+        return False
+    # url = f"{repo.resolve_url()}/{filename}"
+    url = repo_pkg.resolved_url()
+    try:
+        logging.debug(f"Trying to retrieve remote package {filename} from {url}")
+        with urlopen(url) as fsrc, open(dest_file_path, 'wb') as fdst:
+            copyfileobj(fsrc, fdst)
+            return True
+    except HTTPError as e:
+        if e.code == 404:
+            logging.debug(f"remote package {filename} nonexistant on server: {url}")
+        else:
+            logging.error(f"remote package {filename} failed to download ({e.code}): {url}: {e}")
+        return False
+
+
+def check_package_version_built(package: Pkgbuild, arch: Arch, try_download: bool = False) -> bool:
     native_chroot = setup_build_chroot(config.runtime['arch'])
     config_path = '/' + native_chroot.write_makepkg_conf(
         target_arch=arch,
@@ -376,10 +423,10 @@ def check_package_version_built(package: Pkgbuild, arch: Arch) -> bool:
         if not filename_stripped.endswith('.pkg.tar'):
             logging.debug(f'skipping unknown file extension {basename}')
             continue
-        if os.path.exists(file):
+        if os.path.exists(file) or (try_download and try_download_package(file, package.repo, arch)):
             missing = False
             add_file_to_repo(file, repo_name=package.repo, arch=arch)
-            # copy arch=(any) packages to all arches
+        # copy arch=(any) packages to all arches
         if filename_stripped.endswith('any.pkg.tar'):
             logging.info("any-arch pkg detected")
             target_repo_file = os.path.join(config.get_package_dir(arch), package.repo, basename)
@@ -408,7 +455,6 @@ def check_package_version_built(package: Pkgbuild, arch: Arch) -> bool:
                         logging.info(f"copying to {copy_target}")
                         shutil.copyfile(target_repo_file, copy_target)
                         add_file_to_repo(copy_target, package.repo, repo_arch)
-
     return not missing
 
 
@@ -548,6 +594,7 @@ def get_unbuilt_package_levels(
     arch: Arch,
     force: bool = False,
     rebuild_dependants: bool = False,
+    try_download: bool = False,
 ) -> list[set[Pkgbuild]]:
     dependants = set[Pkgbuild]()
     if rebuild_dependants:
@@ -560,7 +607,7 @@ def get_unbuilt_package_levels(
         level = set[Pkgbuild]()
         for package in level_packages:
             if ((force and package in packages) or (rebuild_dependants and package in dependants) or
-                    not check_package_version_built(package, arch)):
+                    not check_package_version_built(package, arch, try_download)):
                 level.add(package)
                 build_names.update(package.names())
         if level:
