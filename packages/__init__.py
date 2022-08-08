@@ -549,11 +549,10 @@ def get_unbuilt_package_levels(
     force: bool = False,
     rebuild_dependants: bool = False,
 ) -> list[set[Pkgbuild]]:
-    dependants = set()
+    dependants = set[Pkgbuild]()
     if rebuild_dependants:
         dependants = get_dependants(repo, packages)
-        packages = dependants.union(set(packages))
-    package_levels = generate_dependency_chain(repo, packages)
+    package_levels = generate_dependency_chain(repo, set(packages).union(dependants))
     build_names = set[str]()
     build_levels = list[set[Pkgbuild]]()
     i = 0
