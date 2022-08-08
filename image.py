@@ -355,11 +355,12 @@ def cmd_image():
 
 @cmd_image.command(name='build')
 @click.argument('profile_name', required=False)
-@click.option('--local-repos/--no-local-repos', '-l/-L', default=True, help='Whether to use local packages. Defaults to true.')
-@click.option('--build-pkgs/--no-build-pkgs', '-p/-P', default=True, help='Whether to build missing/outdated local packages. Defaults to true.')
-@click.option('--block-target', default=None, help='Override the block device file to target')
-@click.option('--skip-part-images', default=False, help='Skip creating image files for the partitions and directly work on the target block device.')
-def cmd_build(profile_name: str = None, local_repos: bool = True, build_pkgs: bool = True, block_target: str = None, skip_part_images: bool = False):
+@click.option('--local-repos/--no-local-repos', '-l/-L', default=True, show_default=True, help='Whether to use local package repos at all or only use HTTPS repos.')
+@click.option('--build-pkgs/--no-build-pkgs', '-p/-P', default=True, show_default=True, help='Whether to build missing/outdated local packages if local repos are enabled.')
+@click.option('--no-download-pkgs', is_flag=True, default=False, help='Disable trying to download packages instead of building if building is enabled.')
+@click.option('--block-target', default=None, help='Override the block device file to write the final image to')
+@click.option('--skip-part-images', is_flag=True, default=False, help='Skip creating image files for the partitions and directly work on the target block device.')
+def cmd_build(profile_name: str = None, local_repos: bool = True, build_pkgs: bool = True, no_download_pkgs=False, block_target: str = None, skip_part_images: bool = False):
     """Build a device image"""
     enforce_wrap()
     profile: Profile = config.get_profile(profile_name)
@@ -379,7 +380,7 @@ def cmd_build(profile_name: str = None, local_repos: bool = True, build_pkgs: bo
     if local_repos and build_pkgs:
         logging.info("Making sure all packages are built")
         repo = discover_packages()
-        build_packages(repo, [p for name, p in repo.items() if name in packages], arch)
+        build_packages(repo, [p for name, p in repo.items() if name in packages], arch, try_download=not no_download_pkgs)
 
     image_path = block_target or get_image_path(device, flavour)
 
