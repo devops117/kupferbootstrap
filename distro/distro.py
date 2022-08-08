@@ -25,13 +25,14 @@ class Distro:
                 scan=scan,
             )
 
-    def get_packages(self):
+    def get_packages(self) -> dict[str, PackageInfo]:
         """ get packages from all repos, semantically overlaying them"""
         results = dict[str, PackageInfo]()
-        for repo in self.repos.values().reverse():
+        for repo in list(self.repos.values())[::-1]:
             assert (repo.packages is not None)
             for package in repo.packages:
                 results[package.name] = package
+        return results
 
     def repos_config_snippet(self, extra_repos: Mapping[str, RepoInfo] = {}) -> str:
         extras = [Repo(name, url_template=info.url_template, arch=self.arch, options=info.options, scan=False) for name, info in extra_repos.items()]

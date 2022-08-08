@@ -12,7 +12,7 @@ from .package import PackageInfo
 
 def resolve_url(url_template, repo_name: str, arch: str):
     result = url_template
-    for template, replacement in {'$repo': repo_name, '$arch': config.runtime['arch']}.items():
+    for template, replacement in {'$repo': repo_name, '$arch': arch}.items():
         result = result.replace(template, replacement)
     return result
 
