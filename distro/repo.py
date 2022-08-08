@@ -34,8 +34,11 @@ class Repo(RepoInfo):
     remote: bool
     scanned: bool = False
 
+    def resolve_url(self) -> str:
+        return resolve_url(self.url_template, repo_name=self.name, arch=self.arch)
+
     def scan(self):
-        self.resolved_url = resolve_url(self.url_template, repo_name=self.name, arch=self.arch)
+        self.resolved_url = self.resolve_url()
         self.remote = not self.resolved_url.startswith('file://')
         uri = f'{self.resolved_url}/{self.name}.db'
         path = ''
