@@ -47,7 +47,7 @@ def get_base_distro(arch: str) -> Distro:
     return Distro(arch=arch, repo_infos=repos, scan=False)
 
 
-def get_kupfer(arch: str, url_template: str) -> Distro:
+def get_kupfer(arch: str, url_template: str, scan: bool = False) -> Distro:
     repos = {name: RepoInfo(url_template=url_template, options={'SigLevel': 'Never'}) for name in REPOSITORIES}
     return Distro(
         arch=arch,
@@ -55,8 +55,8 @@ def get_kupfer(arch: str, url_template: str) -> Distro:
     )
 
 
-def get_kupfer_https(arch: str) -> Distro:
-    return get_kupfer(arch, KUPFER_HTTPS.replace('%branch%', config.file['pacman']['repo_branch']))
+def get_kupfer_https(arch: str, scan: bool = False) -> Distro:
+    return get_kupfer(arch, KUPFER_HTTPS.replace('%branch%', config.file['pacman']['repo_branch']), scan)
 
 
 def get_kupfer_local(arch: Optional[str] = None, in_chroot: bool = True) -> Distro:

@@ -7,7 +7,7 @@ import subprocess
 from copy import deepcopy
 from joblib import Parallel, delayed
 from glob import glob
-from urllib import HTTPError
+from urllib.error import HTTPError
 from urllib.request import urlopen
 from shutil import rmtree, copyfileobj
 from typing import Iterable, Iterator, Any, Optional
@@ -375,7 +375,8 @@ def try_download_package(dest_file_path: str, package: Pkgbuild, arch: Arch) -> 
         logging.debug(f"package filenames don't match: local: {filename}, remote: {repo_pkg.filename}")
         return False
     # url = f"{repo.resolve_url()}/{filename}"
-    url = repo_pkg.resolved_url()
+    url = repo_pkg.resolved_url
+    assert url
     try:
         logging.debug(f"Trying to retrieve remote package {filename} from {url}")
         with urlopen(url) as fsrc, open(dest_file_path, 'wb') as fdst:
@@ -423,7 +424,7 @@ def check_package_version_built(package: Pkgbuild, arch: Arch, try_download: boo
         if not filename_stripped.endswith('.pkg.tar'):
             logging.debug(f'skipping unknown file extension {basename}')
             continue
-        if os.path.exists(file) or (try_download and try_download_package(file, package.repo, arch)):
+        if os.path.exists(file) or (try_download and try_download_package(file, package, arch)):
             missing = False
             add_file_to_repo(file, repo_name=package.repo, arch=arch)
         # copy arch=(any) packages to all arches
