@@ -76,10 +76,13 @@ def init_pkgbuilds(interactive=False):
 
 def init_prebuilts(arch: Arch, dir: str = None):
     """Ensure that all `constants.REPOSITORIES` inside `dir` exist"""
-    prebuilts_dir = dir if dir else config.get_package_dir(arch)
+    prebuilts_dir = dir or config.get_package_dir(arch)
     os.makedirs(prebuilts_dir, exist_ok=True)
     for repo in REPOSITORIES:
-        os.makedirs(os.path.join(prebuilts_dir, repo), exist_ok=True)
+        repo_dir = os.path.join(prebuilts_dir, repo)
+        if not os.path.exists(repo_dir):
+            logging.info(f"Creating local repo {repo} ({arch})")
+            os.makedirs(repo_dir, exist_ok=True)
         for ext1 in ['db', 'files']:
             for ext2 in ['', '.tar.xz']:
                 if not os.path.exists(os.path.join(prebuilts_dir, repo, f'{repo}.{ext1}{ext2}')):
@@ -94,8 +97,7 @@ def init_prebuilts(arch: Arch, dir: str = None):
                         cwd=os.path.join(prebuilts_dir, repo),
                     )
                     if result.returncode != 0:
-                        logging.fatal('Failed to create prebuilt repos')
-                        exit(1)
+                        raise Exception(f'Failed to create local repo {repo}')
 
 
 def discover_packages(parallel: bool = True) -> dict[str, Pkgbuild]:
@@ -366,20 +368,20 @@ def try_download_package(dest_file_path: str, package: Pkgbuild, arch: Arch) -> 
         return False
     repo = repos[repo_name]
     if pkgname not in repo.packages:
-        logging.info(f"Package {pkgname} not found in remote repos: {list(repo.packages.keys())}")
+        logging.warning(f"Package {pkgname} not found in remote repos, building instead.")
         return False
     repo_pkg: PackageInfo = repo.packages[pkgname]
     if repo_pkg.version != package.version:
-        logging.debug(f"Package {pkgname} versions mismatch: local: {package.version}, remote: {repo_pkg.version}")
+        logging.debug(f"Package {pkgname} versions differ: local: {package.version}, remote: {repo_pkg.version}. Building instead.")
         return False
     if repo_pkg.filename != filename:
         logging.debug(f"package filenames don't match: local: {filename}, remote: {repo_pkg.filename}")
         return False
     url = f"{repo.resolve_url()}/{filename}"
-    #url = repo_pkg.resolved_url
     assert url
     try:
-        logging.debug(f"Trying to retrieve remote package {filename} from {url}")
+        logging.info(f"Trying to download package {url}")
+        os.makedirs(os.path.dirname(dest_file_path), exist_ok=True)
         with urlopen(url) as fsrc, open(dest_file_path, 'wb') as fdst:
             copyfileobj(fsrc, fdst)
             logging.info(f"{filename} downloaded from repos")
@@ -632,6 +634,7 @@ def build_packages(
     enable_ccache: bool = True,
     clean_chroot: bool = False,
 ):
+    init_prebuilts(arch)
     build_levels = get_unbuilt_package_levels(
         repo,
         packages,
