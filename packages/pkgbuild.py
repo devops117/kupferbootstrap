@@ -81,9 +81,8 @@ def parse_pkgbuild(relative_pkg_dir: str, native_chroot: Chroot) -> list[Pkgbuil
             multi_pkgs = True
         elif line.startswith('pkgname'):
             if multi_pkgs:
-                if current is not base_package:
-                    base_package.subpackages.append(current)
                 current = deepcopy(base_package)
+                base_package.subpackages.append(current)
             current.name = splits[1]
         elif line.startswith('pkgver'):
             current.pkgver = splits[1]
