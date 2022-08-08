@@ -527,6 +527,21 @@ def build_package(
         raise Exception(f'Failed to compile package {package.path}')
 
 
+def get_dependants(
+    repo: dict[str, Pkgbuild],
+    packages: Iterable[Pkgbuild],
+    recursive: bool = True,
+) -> set[Pkgbuild]:
+    names = set([pkg.name for pkg in packages])
+    to_add = set[Pkgbuild]()
+    for pkg in repo.values():
+        if set.intersection(names, set(pkg.depends)):
+            to_add.add(pkg)
+    if recursive and to_add:
+        to_add.update(get_dependants(repo, to_add))
+    return to_add
+
+
 def get_unbuilt_package_levels(
     repo: dict[str, Pkgbuild],
     packages: Iterable[Pkgbuild],
@@ -534,6 +549,10 @@ def get_unbuilt_package_levels(
     force: bool = False,
     rebuild_dependants: bool = False,
 ) -> list[set[Pkgbuild]]:
+    dependants = set()
+    if rebuild_dependants:
+        dependants = get_dependants(repo, packages)
+        packages = dependants.union(set(packages))
     package_levels = generate_dependency_chain(repo, packages)
     build_names = set[str]()
     build_levels = list[set[Pkgbuild]]()
@@ -541,8 +560,7 @@ def get_unbuilt_package_levels(
     for level_packages in package_levels:
         level = set[Pkgbuild]()
         for package in level_packages:
-            if (not check_package_version_built(package, arch) or (force and package in packages) or
-                (rebuild_dependants and set.intersection(set(package.depends), set(build_names)))):
+            if (not check_package_version_built(package, arch) or (force and package in packages) or (rebuild_dependants and package in dependants)):
                 level.add(package)
                 build_names.update(package.names())
         if level:
