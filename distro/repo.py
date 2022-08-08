@@ -43,7 +43,7 @@ class Repo(RepoInfo):
         uri = f'{self.resolved_url}/{self.name}.db'
         path = ''
         if self.remote:
-            logging.debug(f'Downloading repo file from {uri}')
+            logging.info(f'Downloading repo file from {uri}')
             with urllib.request.urlopen(uri) as request:
                 fd, path = tempfile.mkstemp()
                 with open(fd, 'wb') as writable:

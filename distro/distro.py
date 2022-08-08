@@ -53,6 +53,7 @@ def get_kupfer(arch: str, url_template: str, scan: bool = False) -> Distro:
     return Distro(
         arch=arch,
         repo_infos=repos,
+        scan=scan,
     )
 
 

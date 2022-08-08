@@ -356,16 +356,17 @@ def get_kupfer_https_distro(arch: Arch, scan: bool = True) -> Distro:
 
 
 def try_download_package(dest_file_path: str, package: Pkgbuild, arch: Arch) -> bool:
+    logging.debug(f"checking if we can download {package.name}")
     filename = os.path.basename(dest_file_path)
     pkgname = package.name
     repo_name = package.repo
-    repos = get_kupfer_https_distro(arch).repos
+    repos = get_kupfer_https_distro(arch, scan=True).repos
     if repo_name not in repos:
         logging.warning(f"Repository {repo_name} is not a known HTTPS repo")
         return False
     repo = repos[repo_name]
     if pkgname not in repo.packages:
-        logging.debug(f"Package {pkgname} not found remote")
+        logging.info(f"Package {pkgname} not found in remote repos: {list(repo.packages.keys())}")
         return False
     repo_pkg: PackageInfo = repo.packages[pkgname]
     if repo_pkg.version != package.version:
@@ -374,13 +375,14 @@ def try_download_package(dest_file_path: str, package: Pkgbuild, arch: Arch) -> 
     if repo_pkg.filename != filename:
         logging.debug(f"package filenames don't match: local: {filename}, remote: {repo_pkg.filename}")
         return False
-    # url = f"{repo.resolve_url()}/{filename}"
-    url = repo_pkg.resolved_url
+    url = f"{repo.resolve_url()}/{filename}"
+    #url = repo_pkg.resolved_url
     assert url
     try:
         logging.debug(f"Trying to retrieve remote package {filename} from {url}")
         with urlopen(url) as fsrc, open(dest_file_path, 'wb') as fdst:
             copyfileobj(fsrc, fdst)
+            logging.info(f"{filename} downloaded from repos")
             return True
     except HTTPError as e:
         if e.code == 404:
@@ -429,7 +431,7 @@ def check_package_version_built(package: Pkgbuild, arch: Arch, try_download: boo
             add_file_to_repo(file, repo_name=package.repo, arch=arch)
         # copy arch=(any) packages to all arches
         if filename_stripped.endswith('any.pkg.tar'):
-            logging.info("any-arch pkg detected")
+            logging.debug("any-arch pkg detected")
             target_repo_file = os.path.join(config.get_package_dir(arch), package.repo, basename)
             if os.path.exists(target_repo_file):
                 missing = False
@@ -705,6 +707,7 @@ def build_enable_qemu_binfmt(arch: Arch, repo: dict[str, Pkgbuild] = None):
         ['cross/' + pkg for pkg in CROSSDIRECT_PKGS],
         native,
         repo,
+        try_download=True,
         enable_crosscompile=False,
         enable_crossdirect=False,
         enable_ccache=False,
