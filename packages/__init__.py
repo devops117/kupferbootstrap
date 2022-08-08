@@ -623,12 +623,20 @@ def build_packages(
     arch: Arch,
     force: bool = False,
     rebuild_dependants: bool = False,
+    try_download: bool = False,
     enable_crosscompile: bool = True,
     enable_crossdirect: bool = True,
     enable_ccache: bool = True,
     clean_chroot: bool = False,
 ):
-    build_levels = get_unbuilt_package_levels(repo, packages, arch, force=force, rebuild_dependants=rebuild_dependants)
+    build_levels = get_unbuilt_package_levels(
+        repo,
+        packages,
+        arch,
+        force=force,
+        rebuild_dependants=rebuild_dependants,
+        try_download=try_download,
+    )
 
     if not build_levels:
         logging.info('Everything built already')
@@ -656,6 +664,7 @@ def build_packages_by_paths(
     repo: dict[str, Pkgbuild],
     force=False,
     rebuild_dependants: bool = False,
+    try_download: bool = False,
     enable_crosscompile: bool = True,
     enable_crossdirect: bool = True,
     enable_ccache: bool = True,
@@ -673,6 +682,7 @@ def build_packages_by_paths(
         arch,
         force=force,
         rebuild_dependants=rebuild_dependants,
+        try_download=try_download,
         enable_crosscompile=enable_crosscompile,
         enable_crossdirect=enable_crossdirect,
         enable_ccache=enable_ccache,
@@ -720,8 +730,9 @@ def cmd_update(non_interactive: bool = False):
 @click.option('--force', is_flag=True, default=False, help='Rebuild even if package is already built')
 @click.option('--arch', default=None, help="The CPU architecture to build for")
 @click.option('--rebuild-dependants', is_flag=True, default=False, help='Rebuild packages that depend on packages that will be [re]built')
+@click.option('--no-download', is_flag=True, default=False, help="Don't try downloading packages from online repos before building")
 @click.argument('paths', nargs=-1)
-def cmd_build(paths: list[str], force=False, arch=None, rebuild_dependants: bool = False):
+def cmd_build(paths: list[str], force=False, arch=None, rebuild_dependants: bool = False, no_download: bool = False):
     """
     Build packages by paths.
 
@@ -729,10 +740,16 @@ def cmd_build(paths: list[str], force=False, arch=None, rebuild_dependants: bool
 
     Multiple paths may be specified as separate arguments.
     """
-    build(paths, force, arch, rebuild_dependants)
+    build(paths, force, arch, rebuild_dependants, not no_download)
 
 
-def build(paths: Iterable[str], force: bool, arch: Optional[Arch], rebuild_dependants: bool = False):
+def build(
+    paths: Iterable[str],
+    force: bool,
+    arch: Optional[Arch],
+    rebuild_dependants: bool = False,
+    try_download: bool = False,
+):
     # TODO: arch = config.get_profile()...
     arch = arch or 'aarch64'
 
@@ -750,6 +767,7 @@ def build(paths: Iterable[str], force: bool, arch: Optional[Arch], rebuild_depen
         repo,
         force=force,
         rebuild_dependants=rebuild_dependants,
+        try_download=try_download,
         enable_crosscompile=config.file['build']['crosscompile'],
         enable_crossdirect=config.file['build']['crossdirect'],
         enable_ccache=config.file['build']['ccache'],
