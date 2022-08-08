@@ -559,7 +559,8 @@ def get_unbuilt_package_levels(
     for level_packages in package_levels:
         level = set[Pkgbuild]()
         for package in level_packages:
-            if (not check_package_version_built(package, arch) or (force and package in packages) or (rebuild_dependants and package in dependants)):
+            if ((force and package in packages) or (rebuild_dependants and package in dependants) or
+                    not check_package_version_built(package, arch)):
                 level.add(package)
                 build_names.update(package.names())
         if level:
