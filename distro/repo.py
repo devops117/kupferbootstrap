@@ -5,8 +5,6 @@ import tarfile
 import tempfile
 import urllib.request
 
-from config import config
-
 from .package import PackageInfo
 
 
