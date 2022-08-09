@@ -29,9 +29,8 @@ class Distro:
         """ get packages from all repos, semantically overlaying them"""
         results = dict[str, PackageInfo]()
         for repo in list(self.repos.values())[::-1]:
-            assert (repo.packages is not None)
-            for package in repo.packages:
-                results[package.name] = package
+            assert repo.packages is not None
+            results.update(repo.packages)
         return results
 
     def repos_config_snippet(self, extra_repos: Mapping[str, RepoInfo] = {}) -> str:
