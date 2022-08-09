@@ -735,17 +735,20 @@ def cmd_update(non_interactive: bool = False):
 
 @cmd_packages.command(name='build')
 @click.option('--force', is_flag=True, default=False, help='Rebuild even if package is already built')
-@click.option('--arch', default=None, help="The CPU architecture to build for")
+@click.option('--arch', default=None, required=False, type=click.Choice(ARCHES), help="The CPU architecture to build for")
 @click.option('--rebuild-dependants', is_flag=True, default=False, help='Rebuild packages that depend on packages that will be [re]built')
 @click.option('--no-download', is_flag=True, default=False, help="Don't try downloading packages from online repos before building")
 @click.argument('paths', nargs=-1)
 def cmd_build(paths: list[str], force=False, arch=None, rebuild_dependants: bool = False, no_download: bool = False):
     """
-    Build packages by paths.
+    Build packages (and dependencies) by paths as required.
 
     The paths are specified relative to the PKGBUILDs dir, eg. "cross/crossdirect".
 
     Multiple paths may be specified as separate arguments.
+
+    Packages that aren't built already will be downloaded from HTTPS repos unless --no-download is passed,
+    if an exact version match exists on the server.
     """
     build(paths, force, arch, rebuild_dependants, not no_download)
 

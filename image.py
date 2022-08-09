@@ -369,7 +369,7 @@ def cmd_image():
               is_flag=True,
               default=False,
               help='Disable trying to download packages instead of building if building is enabled.')
-@click.option('--block-target', default=None, help='Override the block device file to write the final image to')
+@click.option('--block-target', type=click.Path(), default=None, help='Override the block device file to write the final image to')
 @click.option('--skip-part-images',
               is_flag=True,
               default=False,
@@ -380,7 +380,11 @@ def cmd_build(profile_name: str = None,
               no_download_pkgs=False,
               block_target: str = None,
               skip_part_images: bool = False):
-    """Build a device image"""
+    """
+    Build a device image.
+
+    Unless overriden, required packages will be built or preferably downloaded from HTTPS repos.
+    """
     enforce_wrap()
     profile: Profile = config.get_profile(profile_name)
     device, flavour = get_device_and_flavour(profile_name)
