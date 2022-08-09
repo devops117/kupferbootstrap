@@ -355,12 +355,31 @@ def cmd_image():
 
 @cmd_image.command(name='build')
 @click.argument('profile_name', required=False)
-@click.option('--local-repos/--no-local-repos', '-l/-L', default=True, show_default=True, help='Whether to use local package repos at all or only use HTTPS repos.')
-@click.option('--build-pkgs/--no-build-pkgs', '-p/-P', default=True, show_default=True, help='Whether to build missing/outdated local packages if local repos are enabled.')
-@click.option('--no-download-pkgs', is_flag=True, default=False, help='Disable trying to download packages instead of building if building is enabled.')
+@click.option('--local-repos/--no-local-repos',
+              '-l/-L',
+              default=True,
+              show_default=True,
+              help='Whether to use local package repos at all or only use HTTPS repos.')
+@click.option('--build-pkgs/--no-build-pkgs',
+              '-p/-P',
+              default=True,
+              show_default=True,
+              help='Whether to build missing/outdated local packages if local repos are enabled.')
+@click.option('--no-download-pkgs',
+              is_flag=True,
+              default=False,
+              help='Disable trying to download packages instead of building if building is enabled.')
 @click.option('--block-target', default=None, help='Override the block device file to write the final image to')
-@click.option('--skip-part-images', is_flag=True, default=False, help='Skip creating image files for the partitions and directly work on the target block device.')
-def cmd_build(profile_name: str = None, local_repos: bool = True, build_pkgs: bool = True, no_download_pkgs=False, block_target: str = None, skip_part_images: bool = False):
+@click.option('--skip-part-images',
+              is_flag=True,
+              default=False,
+              help='Skip creating image files for the partitions and directly work on the target block device.')
+def cmd_build(profile_name: str = None,
+              local_repos: bool = True,
+              build_pkgs: bool = True,
+              no_download_pkgs=False,
+              block_target: str = None,
+              skip_part_images: bool = False):
     """Build a device image"""
     enforce_wrap()
     profile: Profile = config.get_profile(profile_name)
