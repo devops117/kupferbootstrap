@@ -287,7 +287,9 @@ class Chroot(AbstractChroot):
             f.write(makepkg_cross_conf)
         return makepkg_conf_path_relative
 
-    def write_pacman_conf(self, check_space: bool = False):
+    def write_pacman_conf(self, check_space: Optional[bool] = None):
+        if check_space is None:
+            check_space = config.file['pacman']['check_space']
         os.makedirs(self.get_path('/etc'), exist_ok=True)
         conf_text = get_base_distro(self.arch).get_pacman_conf(self.extra_repos, check_space=check_space)
         with open(self.get_path('etc/pacman.conf'), 'w') as file:
