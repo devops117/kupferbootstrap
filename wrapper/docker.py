@@ -64,7 +64,7 @@ class DockerWrapper(BaseWrapper):
 
             ssh_dir = os.path.join(pathlib.Path.home(), '.ssh')
             if not os.path.exists(ssh_dir):
-                os.makedirs(ssh_dir)
+                os.makedirs(ssh_dir, mode=0o700)
             volumes = self.get_bind_mounts_default(wrapped_config)
             volumes |= dict({config.get_path(vol_name): vol_dest for vol_name, vol_dest in DOCKER_PATHS.items()})
             docker_cmd = [
