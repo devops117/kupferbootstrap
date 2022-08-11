@@ -328,6 +328,7 @@ def install_rootfs(
     files = {
         'etc/pacman.conf': get_base_distro(arch).get_pacman_conf(check_space=True, extra_repos=get_kupfer_https(arch).repos),
         'etc/sudoers.d/wheel': "# allow members of group wheel to execute any command\n%wheel ALL=(ALL:ALL) ALL\n",
+        'etc/hostname': profile['hostname'],
     }
     for target, content in files.items():
         with open(os.path.join(chroot.path, target.lstrip('/')), 'w') as file:
