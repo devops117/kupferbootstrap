@@ -147,12 +147,17 @@ def discover_packages(parallel: bool = True) -> dict[str, Pkgbuild]:
     return packages
 
 
-def filter_packages_by_paths(repo: dict[str, Pkgbuild], paths: Iterable[str], allow_empty_results=True) -> Iterable[Pkgbuild]:
+def filter_packages(repo: dict[str, Pkgbuild], paths: Iterable[str], allow_empty_results=True, use_paths=True, use_names=True) -> Iterable[Pkgbuild]:
     if 'all' in paths:
         return list(repo.values())
     result = []
     for pkg in repo.values():
-        if pkg.path in paths:
+        comparison = set()
+        if use_paths:
+            comparison.add(pkg.path)
+        if use_names:
+            comparison.add(pkg.name)
+        if comparison.intersection(paths):
             result += [pkg]
 
     if not allow_empty_results and not result:
@@ -671,7 +676,7 @@ def build_packages_by_paths(
 
     for _arch in set([arch, config.runtime['arch']]):
         init_prebuilts(_arch)
-    packages = filter_packages_by_paths(repo, paths, allow_empty_results=False)
+    packages = filter_packages(repo, paths, allow_empty_results=False)
     return build_packages(
         repo,
         packages,
@@ -782,9 +787,12 @@ def build(
 def cmd_sideload(paths: Iterable[str], arch: Optional[Arch] = None, no_build: bool = False):
     """Build packages, copy to the device via SSH and install them"""
     if not no_build:
-        files = build(paths, False, arch=arch, try_download=True)
-    else:
-        files = [pkg.resolved_url.split('file://')[1] for pkg in get_kupfer_local(arch=arch, scan=True, in_chroot=False).get_packages().values() if pkg.name in paths]
+        build(paths, False, arch=arch, try_download=True)
+    files = [
+        pkg.resolved_url.split('file://')[1]
+        for pkg in get_kupfer_local(arch=arch, scan=True, in_chroot=False).get_packages().values()
+        if pkg.resolved_url and pkg.name in paths
+    ]
     logging.debug(f"Sideload: Found package files: {files}")
     if not files:
         logging.fatal("No packages matched")
@@ -876,7 +884,7 @@ def cmd_check(paths):
         return False
 
     paths = list(paths)
-    packages = filter_packages_by_paths(discover_packages(), paths, allow_empty_results=False)
+    packages = filter_packages(discover_packages(), paths, allow_empty_results=False)
 
     for package in packages:
         name = package.name
