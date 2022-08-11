@@ -15,7 +15,7 @@ from typing import Iterable, Iterator, Any, Optional
 from constants import REPOSITORIES, CROSSDIRECT_PKGS, QEMU_BINFMT_PKGS, GCC_HOSTSPECS, ARCHES, Arch, CHROOT_PATHS, MAKEPKG_CMD
 from config import config
 from chroot.build import get_build_chroot, BuildChroot
-from distro.distro import Distro, PackageInfo, get_kupfer_https as _get_kupfer_https
+from distro.distro import PackageInfo, get_kupfer_https, get_kupfer_local
 from ssh import run_ssh_command, scp_put_files
 from wrapper import enforce_wrap
 from utils import git
@@ -347,22 +347,12 @@ def add_package_to_repo(package: Pkgbuild, arch: Arch):
     return files
 
 
-_kupfer_https = dict[Arch, Distro]()
-
-
-def get_kupfer_https_distro(arch: Arch, scan: bool = True) -> Distro:
-    global _kupfer_https
-    if arch not in _kupfer_https or not _kupfer_https[arch]:
-        _kupfer_https[arch] = _get_kupfer_https(arch, scan=scan)
-    return _kupfer_https[arch]
-
-
 def try_download_package(dest_file_path: str, package: Pkgbuild, arch: Arch) -> bool:
     logging.debug(f"checking if we can download {package.name}")
     filename = os.path.basename(dest_file_path)
     pkgname = package.name
     repo_name = package.repo
-    repos = get_kupfer_https_distro(arch, scan=True).repos
+    repos = get_kupfer_https(arch, scan=True).repos
     if repo_name not in repos:
         logging.warning(f"Repository {repo_name} is not a known HTTPS repo")
         return False
@@ -787,19 +777,28 @@ def build(
 
 @cmd_packages.command(name='sideload')
 @click.argument('paths', nargs=-1)
-def cmd_sideload(paths: Iterable[str]):
+@click.option('--arch', default='aarch64', required=False, type=click.Choice(ARCHES), help="The CPU architecture to build for")
+@click.option('-B', '--no-build', is_flag=True, default=False, help="Don't try to build packages, just copy and install")
+def cmd_sideload(paths: Iterable[str], arch: Optional[Arch] = None, no_build: bool = False):
     """Build packages, copy to the device via SSH and install them"""
-    files = build(paths, True, None)
-    scp_put_files(files, '/tmp')
+    if not no_build:
+        files = build(paths, False, arch=arch, try_download=True)
+    else:
+        files = [pkg.resolved_url.split('file://')[1] for pkg in get_kupfer_local(arch=arch, scan=True, in_chroot=False).get_packages().values() if pkg.name in paths]
+    logging.debug(f"Sideload: Found package files: {files}")
+    if not files:
+        logging.fatal("No packages matched")
+        return
+    scp_put_files(files, '/tmp').check_returncode()
     run_ssh_command([
         'sudo',
-        '-S',
         'pacman',
         '-U',
     ] + [os.path.join('/tmp', os.path.basename(file)) for file in files] + [
         '--noconfirm',
-        '--overwrite=*',
-    ])
+        '--overwrite=\*',
+    ],
+                    alloc_tty=True).check_returncode()
 
 
 @cmd_packages.command(name='clean')
