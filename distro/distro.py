@@ -67,11 +67,29 @@ def get_kupfer(arch: str, url_template: str, scan: bool = False) -> Distro:
     )
 
 
-def get_kupfer_https(arch: str, scan: bool = False) -> Distro:
-    return get_kupfer(arch, KUPFER_HTTPS.replace('%branch%', config.file['pacman']['repo_branch']), scan)
+_kupfer_https = dict[Arch, Distro]()
+_kupfer_local = dict[Arch, Distro]()
+_kupfer_local_chroots = dict[Arch, Distro]()
 
 
-def get_kupfer_local(arch: Optional[str] = None, in_chroot: bool = True) -> Distro:
+def get_kupfer_https(arch: Arch, scan: bool = False) -> Distro:
+    global _kupfer_https
+    if arch not in _kupfer_https or not _kupfer_https[arch]:
+        _kupfer_https[arch] = get_kupfer(arch, KUPFER_HTTPS.replace('%branch%', config.file['pacman']['repo_branch']), scan)
+    item = _kupfer_https[arch]
+    if scan and not item.is_scanned():
+        item.scan()
+    return item
+
+
+def get_kupfer_local(arch: Optional[Arch] = None, in_chroot: bool = True, scan: bool = False) -> Distro:
+    global _kupfer_local, _kupfer_local_chroots
+    cache = _kupfer_local_chroots if in_chroot else _kupfer_local
     arch = arch or config.runtime['arch']
-    dir = CHROOT_PATHS['packages'] if in_chroot else config.get_path('packages')
-    return get_kupfer(arch, f"file://{dir}/$arch/$repo")
+    if arch not in cache or not cache[arch]:
+        dir = CHROOT_PATHS['packages'] if in_chroot else config.get_path('packages')
+        cache[arch] = get_kupfer(arch, f"file://{dir}/$arch/$repo")
+    item = cache[arch]
+    if scan and not item.is_scanned():
+        item.scan()
+    return item
