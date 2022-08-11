@@ -30,4 +30,4 @@ class PackageInfo:
         desc = {}
         for key, value in zip(pruned_lines[0::2], pruned_lines[1::2]):
             desc[key.strip()] = value.strip()
-        return PackageInfo(desc['NAME'], desc['VERSION'], desc['FILENAME'], resolved_url=resolved_url)
+        return PackageInfo(desc['NAME'], desc['VERSION'], desc['FILENAME'], resolved_url='/'.join([resolved_url, desc['FILENAME']]))
