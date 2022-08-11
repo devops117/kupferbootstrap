@@ -1,6 +1,6 @@
 from typing import Optional, Mapping
 
-from constants import ARCHES, BASE_DISTROS, REPOSITORIES, KUPFER_HTTPS, CHROOT_PATHS
+from constants import Arch, ARCHES, BASE_DISTROS, REPOSITORIES, KUPFER_HTTPS, CHROOT_PATHS
 from generator import generate_pacman_conf_body
 from config import config
 
@@ -12,7 +12,7 @@ class Distro:
     repos: Mapping[str, Repo]
     arch: str
 
-    def __init__(self, arch: str, repo_infos: dict[str, RepoInfo], scan=False):
+    def __init__(self, arch: Arch, repo_infos: dict[str, RepoInfo], scan=False):
         assert (arch in ARCHES)
         self.arch = arch
         self.repos = dict[str, Repo]()
@@ -40,6 +40,17 @@ class Distro:
     def get_pacman_conf(self, extra_repos: Mapping[str, RepoInfo] = {}, check_space: bool = True):
         body = generate_pacman_conf_body(self.arch, check_space=check_space)
         return body + self.repos_config_snippet(extra_repos)
+
+    def scan(self, lazy=True):
+        for repo in self.repos.values():
+            if not (lazy and repo.scanned):
+                repo.scan()
+
+    def is_scanned(self):
+        for repo in self.repos.values():
+            if not repo.scanned:
+                return False
+        return True
 
 
 def get_base_distro(arch: str) -> Distro:
