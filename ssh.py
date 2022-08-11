@@ -19,7 +19,11 @@ def cmd_ssh(cmd: list[str], user: str, host: str, port: int):
     run_ssh_command(list(cmd), user=user, host=host, port=port)
 
 
-def run_ssh_command(cmd: list[str] = [], user: Optional[str] = None, host: str = SSH_DEFAULT_HOST, port: int = SSH_DEFAULT_PORT):
+def run_ssh_command(cmd: list[str] = [],
+                    user: Optional[str] = None,
+                    host: str = SSH_DEFAULT_HOST,
+                    port: int = SSH_DEFAULT_PORT,
+                    alloc_tty: bool = False):
     if not user:
         user = config.get_profile()['username']
     keys = find_ssh_keys()
@@ -28,15 +32,19 @@ def run_ssh_command(cmd: list[str] = [], user: Optional[str] = None, host: str =
         extra_args += ['-i', keys[0]]
     if config.runtime['verbose']:
         extra_args += ['-v']
-    logging.info(f'Opening SSH connection to {host}')
-    return subprocess.run([
+    if alloc_tty:
+        extra_args += ['-t']
+    logging.info(f'Opening SSH connection to {(user + "@") if user else ""}{host} ({port})')
+    full_cmd = [
         'ssh',
     ] + extra_args + SSH_COMMON_OPTIONS + [
         '-p',
         str(port),
         f'{user}@{host}',
         '--',
-    ] + cmd)
+    ] + cmd
+    logging.debug(f"running cmd: {full_cmd}")
+    return subprocess.run(full_cmd)
 
 
 def scp_put_files(src: list[str], dst: str, user: str = None, host: str = SSH_DEFAULT_HOST, port: int = SSH_DEFAULT_PORT):
@@ -46,14 +54,17 @@ def scp_put_files(src: list[str], dst: str, user: str = None, host: str = SSH_DE
     key_args = []
     if len(keys) > 0:
         key_args = ['-i', keys[0]]
-    return subprocess.run([
+    cmd = [
         'scp',
     ] + key_args + SSH_COMMON_OPTIONS + [
         '-P',
         str(port),
     ] + src + [
         f'{user}@{host}:{dst}',
-    ])
+    ]
+    logging.info(f"Copying files to {user}@{host}:{dst}:\n{src}")
+    logging.debug(f"running cmd: {cmd}")
+    return subprocess.run(cmd)
 
 
 def find_ssh_keys():
