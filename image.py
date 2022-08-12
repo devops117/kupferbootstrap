@@ -456,7 +456,7 @@ def cmd_build(profile_name: str = None,
 
 @cmd_image.command(name='inspect')
 @click.option('--shell', '-s', is_flag=True)
-@click.argument('profile')
+@click.argument('profile', required=False)
 def cmd_inspect(profile: str = None, shell: bool = False):
     """Open a shell in a device image"""
     enforce_wrap()
