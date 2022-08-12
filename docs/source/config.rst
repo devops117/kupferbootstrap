@@ -15,6 +15,10 @@ File Location
 
 The configuration is stored in ``~/.config/kupfer/kupferbootstrap.toml``, where ``~`` is your user's home folder.
 
+Kupferbootstrap needs to create a number of folders, e.g. to download ``PKGBUILDs.git`` and store binary packages.
+By default, all of those folders live inside ``~/.cache/kupfer/``.
+
+See also the ``[paths]`` section in your config.
 
 Sections
 ########
@@ -72,7 +76,7 @@ Here's an example:
     [profiles.default]
     parent = ""
     device = "oneplus-enchilada"
-    flavour = "phosh"
+    flavour = "barebone"
     pkgs_include = [ "wget", "rsync", "nano", "tmux", "zsh", "pv", ]
     pkgs_exclude = []
     hostname = "kupferphone"
@@ -81,6 +85,7 @@ Here's an example:
 
     [profiles.graphical]
     parent = "default"
+    flavour = "phosh"
     pkgs_include = [ "firefox", "tilix", "gnome-tweaks" ]
     size_extra_mb = "+3000"
 
