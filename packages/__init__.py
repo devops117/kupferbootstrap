@@ -467,7 +467,7 @@ def setup_build_chroot(
     init_prebuilts(arch)
     chroot = get_build_chroot(arch, add_kupfer_repos=add_kupfer_repos)
     chroot.mount_packages()
-    logging.info(f'Initializing {arch} build chroot')
+    logging.debug(f'packages.py: Initializing {arch} build chroot')
     chroot.initialize(reset=clean_chroot)
     chroot.write_pacman_conf()  # in case it was initialized with different repos
     chroot.activate()
