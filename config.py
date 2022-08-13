@@ -463,6 +463,21 @@ def config_dot_name_set(name: str, value: Any, config: dict[str, Any]):
     config[split_name[-1]] = value
 
 
+def prompt_for_save(retry_ctx: Optional[click.Context] = None):
+    """
+    Prompt whether to save the config file. If no is answered, `False` is returned.
+
+    If `retry_ctx` is passed, the context's command will be reexecuted with the same arguments if the user chooses to retry.
+    False will still be returned as the retry is expected to either save, perform another retry or arbort.
+    """
+    if click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?', default=True):
+        return True
+    if retry_ctx:
+        if click.confirm('Retry? ("n" to quit without saving)', default=True):
+            retry_ctx.forward(retry_ctx.command)
+    return False
+
+
 config = ConfigStateHolder(file_conf_base=CONFIG_DEFAULTS)
 
 config_option = click.option(
@@ -493,7 +508,8 @@ noop_flag = click.option('--noop', '-n', help="Don't write changes to file", is_
     default=CONFIG_SECTIONS,
     show_choices=True,
 )
-def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool = False, noop: bool = False):
+@click.pass_context
+def cmd_config_init(ctx, sections: list[str] = CONFIG_SECTIONS, non_interactive: bool = False, noop: bool = False):
     """Initialize the config file"""
     if not non_interactive:
         results: dict[str, dict] = {}
@@ -517,7 +533,7 @@ def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool
             profile, changed = prompt_profile(new_current, create=True)
             config.update_profile(new_current, profile)
         if not noop:
-            if not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
+            if not prompt_for_save(ctx):
                 return
 
     if not noop:
@@ -530,7 +546,8 @@ def cmd_config_init(sections: list[str] = CONFIG_SECTIONS, non_interactive: bool
 @noninteractive_flag
 @noop_flag
 @click.argument('key_vals', nargs=-1)
-def cmd_config_set(key_vals: list[str], non_interactive: bool = False, noop: bool = False):
+@click.pass_context
+def cmd_config_set(ctx, key_vals: list[str], non_interactive: bool = False, noop: bool = False):
     """
     Set config entries. Pass entries as `key=value` pairs, with keys as dot-separated identifiers,
     like `build.clean_mode=false` or alternatively just keys to get prompted if run interactively.
@@ -559,7 +576,7 @@ def cmd_config_set(key_vals: list[str], non_interactive: bool = False, noop: boo
         if merge_configs(config_copy, warn_missing_defaultprofile=False) != config_copy:
             raise Exception('Config "{key}" = "{value}" failed to evaluate')
     if not noop:
-        if not non_interactive and not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
+        if not non_interactive and not prompt_for_save(ctx):
             return
         config.update(config_copy)
         config.write()
@@ -586,7 +603,8 @@ def cmd_profile():
 @noninteractive_flag
 @noop_flag
 @click.argument('name', required=True)
-def cmd_profile_init(name: str, non_interactive: bool = False, noop: bool = False):
+@click.pass_context
+def cmd_profile_init(ctx, name: str, non_interactive: bool = False, noop: bool = False):
     """Create or edit a profile"""
     profile = deepcopy(PROFILE_EMPTY)
     if name in config.file['profiles']:
@@ -597,36 +615,8 @@ def cmd_profile_init(name: str, non_interactive: bool = False, noop: bool = Fals
 
     config.update_profile(name, profile)
     if not noop:
-        if not click.confirm(f'Do you want to save your changes to {config.runtime["config_file"]}?'):
+        if not prompt_for_save(ctx):
             return
         config.write()
     else:
         logging.info(f'--noop passed, not writing to {config.runtime["config_file"]}!')
-
-
-# temporary demo
-if __name__ == '__main__':
-    print('vanilla:')
-    print(toml.dumps(config.file))
-    print('\n\n-----------------------------\n\n')
-
-    try:
-        config.try_load_file()
-        config.enforce_config_loaded()
-        conf = config.file
-    except ConfigLoadException as ex:
-        logging.fatal(str(ex))
-        conf = deepcopy(CONFIG_DEFAULTS)
-    conf['profiles']['pinephone'] = {
-        'hostname': 'slowphone',
-        'parent': '',
-        'pkgs_include': ['zsh', 'tmux', 'mpv', 'firefox'],
-        'pkgs_exclude': ['pixman-git'],
-    }
-    conf['profiles']['yeetphone'] = {
-        'parent': 'pinephone',
-        'hostname': 'yeetphone',
-        'pkgs_include': ['pixman-git'],
-        'pkgs_exclude': ['tmux'],
-    }
-    print(toml.dumps(conf))
