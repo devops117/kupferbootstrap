@@ -57,7 +57,7 @@ CONFIG_DEFAULTS: dict = {
     },
     'pacman': {
         'parallel_downloads': 4,
-        'check_space': True,
+        'check_space': False,  # TODO: True causes issues
         'repo_branch': DEFAULT_PACKAGE_BRANCH,
     },
     'paths': {
