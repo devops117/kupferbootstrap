@@ -39,7 +39,7 @@ build_docker:
 .docs:
   image: "${CI_REGISTRY_IMAGE}:dev"
   before_script:
-    - pacman -Sy --noconfirm python-sphinx-{click,furo}
+    - pip install -r docs/requirements.txt
   script:
     - (cd docs && make)
     - mv docs/html public
